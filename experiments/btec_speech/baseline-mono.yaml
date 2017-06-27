@@ -34,9 +34,9 @@ encoders:
     #input_layers: [256, 256]
 
 decoders:
-  -  name: en
-     layers: 2
-     max_len: 25
-     maxout: True
-     vanilla: True
-     attn_prev_word: True
+  - name: en
+    layers: 2
+    max_len: 25
+    maxout: True
+    vanilla: True
+    attn_prev_word: True

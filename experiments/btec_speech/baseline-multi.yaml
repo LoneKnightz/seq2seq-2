@@ -31,12 +31,16 @@ encoders:
     attention_filters: 1
     attention_filter_length: 25
     max_len: 600
-    #input_layers: [256, 256]
+    input_layers: [256, 256]
 
 decoders:
-  -  name: en
-     layers: 2
-     max_len: 25
-     maxout: True
-     vanilla: True
-     attn_prev_word: True
+  - name: en
+    layers: 2
+    max_len: 25
+    maxout: True
+    input_attention: False
+    use_previous_word: False
+    vanilla: False
+    attn_prev_word: False
+    maxout_stride: null
+    convolutions: null

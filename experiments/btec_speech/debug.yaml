@@ -14,8 +14,8 @@ batch_size: 32
 steps_per_checkpoint: 100
 steps_per_eval: 100
 
-train_prefix: train.1000.Michel
-dev_prefix: dev.100.Michel
+train_prefix: train.1000
+dev_prefix: dev.100
 
 cell_size: 64
 embedding_size: 64
@@ -24,20 +24,22 @@ attn_size: 64
 encoders:
   - name: feats41
     embedding_size: 41
-    layers: 3
-    #time_pooling: [4]
-    #pooling_avg: True
+    layers: 2
+    time_pooling: [4]
+    pooling_avg: True
     binary: True
     max_len: 400
     attention_filters: 2
     attention_filter_length: 20
-    time_pooling: [2, 2]
-    pooling_avg: True
 
 decoders:
   - name: en
     layers: 1
     max_len: 18
-    maxout: True
-    vanilla: True
-    attn_prev_word: True
+    maxout: False
+    input_attention: False
+    use_previous_word: False
+    vanilla: False
+    attn_prev_word: False
+    maxout_stride: null
+    convolutions: null

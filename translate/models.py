@@ -116,6 +116,11 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
             if other_inputs is not None:
                 encoder_inputs_ = tf.concat([encoder_inputs_, other_inputs], axis=2)
 
+            if encoder.input_layers:
+                for j, layer_size in enumerate(encoder.input_layers):
+                    encoder_inputs_ = dense(encoder_inputs_, layer_size, activation=tf.tanh, use_bias=True,
+                                            name='layer_{}'.format(j))
+
             if encoder.convolutions:
                 if encoder.binary:
                     raise NotImplementedError
