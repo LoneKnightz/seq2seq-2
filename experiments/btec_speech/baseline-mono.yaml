@@ -7,7 +7,6 @@ use_lstm: True
 
 data_dir: experiments/btec_speech/data
 model_dir: experiments/btec_speech/baseline_mono
-log_file: experiments/btec_speech/baseline_mono/log.txt
 
 optimizer: 'adam'
 max_steps: 20000

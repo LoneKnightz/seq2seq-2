@@ -7,7 +7,6 @@ use_lstm: False
 
 data_dir: experiments/btec_speech/data
 model_dir: experiments/btec_speech/debug
-log_file: experiments/btec_speech/debug/log.txt
 
 optimizer: 'adam'
 max_steps: 20000

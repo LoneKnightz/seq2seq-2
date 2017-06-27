@@ -118,7 +118,8 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
 
             if encoder.convolutions:
                 if encoder.binary:
-                    raise NotImplementedError  # FIXME
+                    raise NotImplementedError
+
                 pad = tf.nn.embedding_lookup(embedding, utils.BOS_ID)
                 pad = tf.expand_dims(tf.expand_dims(pad, axis=0), axis=1)
                 pad = tf.tile(pad, [batch_size, 1, 1])
@@ -147,7 +148,8 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
 
             if encoder.maxout_stride:
                 if encoder.binary:
-                    raise NotImplementedError  # FIXME
+                    raise NotImplementedError
+
                 stride = encoder.maxout_stride
                 k = tf.to_int32(tf.ceil(time_steps / stride) * stride) - time_steps   # TODO: simpler
                 pad = tf.zeros([batch_size, k, tf.shape(encoder_inputs_)[2]])
@@ -328,66 +330,40 @@ def local_attention(state, hidden_states, encoder, encoder_input_length, pos=Non
     with tf.variable_scope(scope or 'attention'):
         encoder_input_length = tf.to_float(tf.expand_dims(encoder_input_length, axis=1))
 
-        if pos is not None:
-            pos = tf.reshape(pos, [-1, 1])
-            pos = tf.minimum(pos, encoder_input_length - 1)
+        # Local attention of Luong et al. (http://arxiv.org/abs/1508.04025)
+        wp = get_variable('Wp', [state_size, state_size])
+        vp = get_variable('vp', [state_size, 1])
 
-        if pos is not None and encoder.attention_window_size > 0:
-            # `pred_edits` scenario, where we know the aligned pos
-            # when the windows size is non-zero, we concatenate consecutive encoder states
-            # and map it to the right attention vector size.
-            weights = tf.to_float(tf.one_hot(tf.cast(tf.squeeze(pos, axis=1), tf.int32), depth=attn_length))
+        pos = tf.nn.sigmoid(tf.matmul(tf.nn.tanh(tf.matmul(state, wp)), vp))
+        pos = tf.floor(encoder_input_length * pos)
+        pos = tf.reshape(pos, [-1, 1])
+        pos = tf.minimum(pos, encoder_input_length - 1)
 
-            weighted_average = []
-            for offset in range(-encoder.attention_window_size, encoder.attention_window_size + 1):
-                pos_ = pos + offset
-                pos_ = tf.minimum(pos_, encoder_input_length - 1)
-                pos_ = tf.maximum(pos_, 0)  # TODO: when pos is < 0, use <S> or </S>
-                weights_ = tf.to_float(tf.one_hot(tf.cast(tf.squeeze(pos_, axis=1), tf.int32), depth=attn_length))
-                weighted_average_ = tf.reduce_sum(tf.expand_dims(weights_, axis=2) * hidden_states, axis=1)
-                weighted_average.append(weighted_average_)
+        idx = tf.tile(tf.to_float(tf.range(attn_length)), tf.stack([batch_size]))
+        idx = tf.reshape(idx, [-1, attn_length])
 
-            weighted_average = tf.concat(weighted_average, axis=1)
-            weighted_average = dense(weighted_average, encoder.attn_size)
-        elif pos is not None:
-            weights = tf.to_float(tf.one_hot(tf.cast(tf.squeeze(pos, axis=1), tf.int32), depth=attn_length))
-            weighted_average = tf.reduce_sum(tf.expand_dims(weights, axis=2) * hidden_states, axis=1)
-        else:
-            # Local attention of Luong et al. (http://arxiv.org/abs/1508.04025)
-            wp = get_variable('Wp', [state_size, state_size])
-            vp = get_variable('vp', [state_size, 1])
+        low = pos - encoder.attention_window_size
+        high = pos + encoder.attention_window_size
 
-            pos = tf.nn.sigmoid(tf.matmul(tf.nn.tanh(tf.matmul(state, wp)), vp))
-            pos = tf.floor(encoder_input_length * pos)
-            pos = tf.reshape(pos, [-1, 1])
-            pos = tf.minimum(pos, encoder_input_length - 1)
+        mlow = tf.to_float(idx < low)
+        mhigh = tf.to_float(idx > high)
+        m = mlow + mhigh
+        m += tf.to_float(idx >= encoder_input_length)
 
-            idx = tf.tile(tf.to_float(tf.range(attn_length)), tf.stack([batch_size]))
-            idx = tf.reshape(idx, [-1, attn_length])
+        mask = tf.to_float(tf.equal(m, 0.0))
 
-            low = pos - encoder.attention_window_size
-            high = pos + encoder.attention_window_size
+        e = compute_energy(hidden_states, state, attn_size=encoder.attn_size, **kwargs)
 
-            mlow = tf.to_float(idx < low)
-            mhigh = tf.to_float(idx > high)
-            m = mlow + mhigh
-            m += tf.to_float(idx >= encoder_input_length)
+        weights = softmax(e, mask=mask)
 
-            mask = tf.to_float(tf.equal(m, 0.0))
+        sigma = encoder.attention_window_size / 2
+        numerator = -tf.pow((idx - pos), tf.convert_to_tensor(2, dtype=tf.float32))
+        div = tf.truediv(numerator, 2 * sigma ** 2)
+        weights *= tf.exp(div)  # result of the truncated normal distribution
+        # normalize to keep a probability distribution
+        # weights /= (tf.reduce_sum(weights, axis=1, keep_dims=True) + 10e-12)
 
-            e = compute_energy(hidden_states, state, attn_size=encoder.attn_size, **kwargs)
-
-            weights = softmax(e, mask=mask)
-
-            sigma = encoder.attention_window_size / 2
-            numerator = -tf.pow((idx - pos), tf.convert_to_tensor(2, dtype=tf.float32))
-            div = tf.truediv(numerator, 2 * sigma ** 2)
-            weights *= tf.exp(div)  # result of the truncated normal distribution
-            # normalize to keep a probability distribution
-            # weights /= (tf.reduce_sum(weights, axis=1, keep_dims=True) + 10e-12)
-
-            weighted_average = tf.reduce_sum(tf.expand_dims(weights, axis=2) * hidden_states, axis=1)
-
+        weighted_average = tf.reduce_sum(tf.expand_dims(weights, axis=2) * hidden_states, axis=1)
         return weighted_average, weights
 
 
@@ -428,8 +404,8 @@ def multi_attention(state, hidden_states, encoders, encoder_input_length, pos=No
     return context_vector, weights
 
 
-def simple_decoder(decoder_inputs, initial_state, attention_states, encoders, decoder, encoder_input_length,
-                   dropout=None, feed_previous=0.0, align_encoder_id=0, **kwargs):
+def attention_decoder(decoder_inputs, initial_state, attention_states, encoders, decoder, encoder_input_length,
+                      dropout=None, feed_previous=0.0, align_encoder_id=0, **kwargs):
     """
     :param targets: tensor of shape (output_length, batch_size)
     :param initial_state: initial state of the decoder (usually the final state of the encoder),
@@ -679,7 +655,7 @@ def encoder_decoder(encoders, decoders, dropout, encoder_inputs, targets, feed_p
     attention_states, encoder_state, encoder_input_length = multi_encoder(
         encoder_input_length=encoder_input_length, **parameters)
 
-    outputs, attention_weights, _, _, beam_tensors = simple_decoder(
+    outputs, attention_weights, _, _, beam_tensors = attention_decoder(
         attention_states=attention_states, initial_state=encoder_state, feed_previous=feed_previous,
         decoder_inputs=targets[:, :-1], align_encoder_id=align_encoder_id, encoder_input_length=encoder_input_length,
         **parameters
