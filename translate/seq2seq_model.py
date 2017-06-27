@@ -126,7 +126,7 @@ class Seq2SeqModel(object):
 
         return namedtuple('output', 'loss weights')(res['loss'], res.get('weights'))
 
-    def greedy_decoding(self, session, token_ids, print_stats=False):
+    def greedy_decoding(self, session, token_ids):
         if self.dropout is not None:
             session.run(self.dropout_off)
 
@@ -145,24 +145,6 @@ class Seq2SeqModel(object):
             input_feed[self.encoder_input_length[i]] = input_length[i]
 
         outputs = session.run(self.outputs, input_feed)
-
-        e = np.exp(outputs[0])
-        o = np.max(e, axis=2) / np.sum(e, axis=2)
-
-        o = o.flatten()
-
-        if not hasattr(self, 'stats'):
-            self.stats = []
-
-        self.stats.append(o)
-
-        if print_stats:
-            stats = np.concatenate(self.stats)
-            utils.debug('softmax stats: min={:.2f}, max={:.2f}, avg={:.2f}, std={:.2f}'.format(
-                np.min(stats), np.max(stats), np.mean(stats), np.std(stats)
-            ))
-            self.stats = []
-
         return [np.argmax(outputs_, axis=2) for outputs_ in outputs]
 
     def beam_search_decoding(self, session, token_ids, beam_size, early_stopping=True):
@@ -232,8 +214,6 @@ class Seq2SeqModel(object):
             new_data = [[] for _ in session]
             new_input = []
             new_beam_size = beam_size
-
-            greedy_tokens = {}
 
             for flat_id, hyp_id, token_id in zip(flat_ids, hyp_ids, token_ids_):
                 hypothesis = hypotheses[hyp_id] + [token_id]

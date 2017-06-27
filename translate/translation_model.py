@@ -145,8 +145,6 @@ class TranslationModel:
                                                                       early_stopping=early_stopping)
                 batch_token_ids = [[hypotheses[0]]]  # first hypothesis is the highest scoring one
             else:
-                #batch_token_ids = self.seq2seq_model.greedy_decoding(sess, token_ids,
-                #                                                     print_stats=(batch_id == len(batches) - 1))
                 batch_token_ids = self.seq2seq_model.greedy_decoding(sess, token_ids)
                 batch_token_ids = zip(*batch_token_ids)
 
