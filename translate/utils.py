@@ -85,51 +85,6 @@ class AttrDict(dict):
         return self.__dict__.get(item)
 
 
-def reverse_edits(source, edits, fix=True, strict=False):
-    if len(edits) == 1:    # transform list of edits as a list of (op, word) tuples
-        edits = edits[0]
-        for i, edit in enumerate(edits):
-            if edit in (_KEEP, _DEL, _INS, _SUB):
-                edit = (edit, edit)
-            elif edit.startswith(_INS + '_'):
-                edit = (_INS, edit[len(_INS + '_'):])
-            elif edit.startswith(_SUB + '_'):
-                edit = (_SUB, edit[len(_SUB + '_'):])
-            else:
-                edit = (_INS, edit)
-
-            edits[i] = edit
-    else:
-        edits = zip(*edits)
-
-    src_words = source
-    target = []
-    consistent = True
-    i = 0
-
-    for op, word in edits:
-        if strict and not consistent:
-            break
-        if op in (_DEL, _KEEP, _SUB):
-            if i >= len(src_words):
-                consistent = False
-                continue
-
-            if op == _KEEP:
-                target.append(src_words[i])
-            elif op == _SUB:
-                target.append(word)
-
-            i += 1
-        else:   # op is INS
-            target.append(word)
-
-    if fix:
-        target += src_words[i:]
-
-    return target
-
-
 def initialize_vocabulary(vocabulary_path):
     """
     Initialize vocabulary from file.
@@ -174,7 +129,7 @@ def sentence_to_token_ids(sentence, vocabulary, character_level=False):
 
 
 def get_filenames(data_dir, model_dir, extensions, train_prefix, dev_prefix, vocab_prefix, name=None,
-                  ref_ext=None, **kwargs):
+                  ref_ext=None, binary=None, **kwargs):
     """
     Get a bunch of file prefixes and extensions, and output the list of filenames to be used
     by the model.
@@ -205,8 +160,9 @@ def get_filenames(data_dir, model_dir, extensions, train_prefix, dev_prefix, voc
     vocab = ['{}.{}'.format(vocab_path, ext) for ext in extensions]
     os.makedirs(os.path.dirname(vocab_path), exist_ok=True)
 
-    for src, dest in zip(vocab_src, vocab):
-        if not os.path.exists(dest):
+    binary = binary or [False] * len(vocab)
+    for src, dest, binary_ in zip(vocab_src, vocab, binary):
+        if not binary_ and not os.path.exists(dest):
             debug('copying vocab to {}'.format(dest))
             shutil.copy(src, dest)
 
@@ -220,26 +176,32 @@ def get_filenames(data_dir, model_dir, extensions, train_prefix, dev_prefix, voc
 
 
 def read_dataset(paths, extensions, vocabs, max_size=None, character_level=None, sort_by_length=False,
-                 max_seq_len=None, from_position=None):
+                 max_seq_len=None, from_position=None, binary=None):
+    if from_position is not None:
+        raise NotImplementedError  # FIXME
+
     data_set = []
 
     if from_position is not None:
         debug('reading from position: {}'.format(from_position))
 
-    line_reader = read_lines_from_position(paths, from_position=from_position)
+    # line_reader = read_lines_from_position(paths, from_position=from_position, binary=binary)
+    line_reader = read_lines(paths, binary=binary)
     character_level = character_level or {}
 
     positions = None
 
-    for inputs, positions in line_reader:
+    #for inputs, positions in line_reader:
+    for inputs in line_reader:
         if len(data_set) > 0 and len(data_set) % 100000 == 0:
             log("  lines read {}".format(len(data_set)))
         if max_size and len(data_set) >= max_size:
             break
 
         lines = [
+            input_ if binary_ else
             sentence_to_token_ids(input_, vocab.vocab, character_level=character_level.get(ext))
-            for input_, vocab, ext in zip(inputs, vocabs, extensions)
+            for input_, vocab, binary_, ext in zip(inputs, vocabs, binary, extensions)
         ]
 
         if not all(lines):  # skip empty inputs
@@ -328,11 +290,11 @@ def read_ahead_batch_iterator(data, batch_size, read_ahead=10, shuffle=True, all
 
 
 def get_batch_iterator(paths, extensions, vocabs, batch_size, max_size=None, character_level=None,
-                       sort_by_length=False, max_seq_len=None, read_ahead=10, mode='standard', shuffle=True):
+                       sort_by_length=False, max_seq_len=None, read_ahead=10, mode='standard', shuffle=True,
+                       binary=None):
     read_shard = functools.partial(read_dataset,
         paths=paths, extensions=extensions, vocabs=vocabs, max_size=max_size, max_seq_len=max_seq_len,
-        character_level=character_level, sort_by_length=sort_by_length)
-
+        character_level=character_level, sort_by_length=sort_by_length, binary=binary)
     batch_iterator = functools.partial(read_ahead_batch_iterator,
         batch_size=batch_size, read_ahead=read_ahead, mode=mode, shuffle=shuffle)
 
@@ -388,11 +350,41 @@ def get_batches(data, batch_size, batches=0, allow_smaller=True):
     return batches
 
 
-def read_lines(paths):
-    return zip(*[sys.stdin if path is None else open(path) for path in paths])
+def read_binary_features(filename):
+    """
+    Reads a binary file containing vector features. First two (int32) numbers correspond to
+    number of entries (lines), and dimension of the vectors.
+    Each entry starts with a 32 bits integer indicating the number of frames, followed by
+    (frames * dimension) 32 bits floats.
+
+    Use `scripts/extract-audio-features.py` to create such a file for audio (MFCCs).
+
+    :param filename: path to the binary file containing the features
+    :return: list of arrays of shape (frames, dimension)
+    """
+    all_feats = []
+
+    with open(filename, 'rb') as f:
+        lines, dim = struct.unpack('ii', f.read(8))
+        for _ in range(lines):
+            frames, = struct.unpack('i', f.read(4))
+            n = frames * dim
+            feats = struct.unpack('f' * n, f.read(4 * n))
+            all_feats.append(list(np.array(feats).reshape(frames, dim)))
+
+    return all_feats
 
 
-def read_lines_from_position(paths, from_position=None):
+def read_lines(paths, binary=None):
+    binary = binary or [False] * len(paths)
+    return zip(*[sys.stdin if path is None else
+                 read_binary_features(path) if binary_ else open(path)
+                 for path, binary_ in zip(paths, binary)])
+
+
+def read_lines_from_position(paths, from_position=None, binary=None):
+    if binary is not None and any(binary):
+        raise NotImplementedError  # TODO
     with open_files(paths) as files:
         if from_position:
             for path, file_, position in zip(paths, files, from_position):

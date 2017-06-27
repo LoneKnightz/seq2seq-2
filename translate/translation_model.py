@@ -15,13 +15,16 @@ from translate.seq2seq_model import Seq2SeqModel
 class TranslationModel:
     def __init__(self, encoders, decoders, checkpoint_dir, learning_rate, learning_rate_decay_factor,
                  batch_size, keep_best=1, dev_prefix=None, score_function='corpus_scores', name=None, ref_ext=None,
-                 pred_edits=False, dual_output=False, **kwargs):
+                 **kwargs):
 
         self.batch_size = batch_size
         self.character_level = {}
+        self.binary = []
         for encoder_or_decoder in encoders + decoders:
             encoder_or_decoder.ext = encoder_or_decoder.ext or encoder_or_decoder.name
             self.character_level[encoder_or_decoder.ext] = encoder_or_decoder.character_level
+            self.binary.append(encoder_or_decoder.get('binary', False))
+
         self.char_output = decoders[0].character_level
 
         self.src_ext = [encoder.ext for encoder in encoders]
@@ -30,8 +33,6 @@ class TranslationModel:
         self.extensions = self.src_ext + self.trg_ext
 
         self.ref_ext = ref_ext
-        self.pred_edits = pred_edits
-        self.dual_output = dual_output
 
         self.dev_prefix = dev_prefix
         self.name = name
@@ -47,16 +48,17 @@ class TranslationModel:
             self.global_step = tf.Variable(0, trainable=False, name='global_step')
 
         self.filenames = utils.get_filenames(extensions=self.extensions, dev_prefix=dev_prefix, name=name,
-                                             ref_ext=ref_ext, **kwargs)
+                                             ref_ext=ref_ext, binary=self.binary, **kwargs)
         utils.debug('reading vocabularies')
         self.read_vocab()
 
         for encoder_or_decoder, vocab in zip(encoders + decoders, self.vocabs):
-            encoder_or_decoder.vocab_size = len(vocab.reverse)
+            if vocab:
+                encoder_or_decoder.vocab_size = len(vocab.reverse)
 
         utils.debug('creating model')
         self.seq2seq_model = Seq2SeqModel(encoders, decoders, self.learning_rate, self.global_step, name=name,
-                                          pred_edits=pred_edits, dual_output=dual_output, **kwargs)
+                                          **kwargs)
 
         self.batch_iterator = None
         self.dev_batches = None
@@ -78,14 +80,14 @@ class TranslationModel:
         self.batch_iterator, self.train_size = utils.get_batch_iterator(
             self.filenames.train, self.extensions, self.vocabs, self.batch_size,
             max_size=max_train_size, character_level=self.character_level, max_seq_len=self.max_len,
-            read_ahead=read_ahead, mode=batch_mode, shuffle=shuffle
+            read_ahead=read_ahead, mode=batch_mode, shuffle=shuffle, binary=self.binary,
         )
 
         utils.debug('reading development data')
 
         dev_sets = [
             utils.read_dataset(dev, self.extensions, self.vocabs, max_size=max_dev_size,
-                               character_level=self.character_level)[0]
+                               character_level=self.character_level, binary=self.binary)[0]
             for dev in self.filenames.dev
         ]
         # subset of the dev set whose perplexity is periodically evaluated
@@ -94,8 +96,8 @@ class TranslationModel:
     def read_vocab(self):
         # don't try reading vocabulary for encoders that take pre-computed features
         self.vocabs = [
-            utils.initialize_vocabulary(vocab_path)
-            for ext, vocab_path in zip(self.extensions, self.filenames.vocab)
+            None if binary else utils.initialize_vocabulary(vocab_path)
+            for vocab_path, binary in zip(self.filenames.vocab, self.binary)
         ]
         self.src_vocab, self.trg_vocab = self.vocabs[:len(self.src_ext)], self.vocabs[len(self.src_ext):]
 
@@ -113,8 +115,7 @@ class TranslationModel:
     def decode_sentence(self, sess, sentence_tuple, beam_size=1, remove_unk=False, early_stopping=True):
         return next(self.decode_batch(sess, [sentence_tuple], beam_size, remove_unk, early_stopping))
 
-    def decode_batch(self, sess, sentence_tuples, batch_size, beam_size=1, remove_unk=False, early_stopping=True,
-                     fix_edits=True):
+    def decode_batch(self, sess, sentence_tuples, batch_size, beam_size=1, remove_unk=False, early_stopping=True):
         beam_search = beam_size > 1 or isinstance(sess, list)
 
         if beam_search:
@@ -128,6 +129,7 @@ class TranslationModel:
 
         def map_to_ids(sentence_tuple):
             token_ids = [
+                sentence if vocab is None else
                 utils.sentence_to_token_ids(sentence, vocab.vocab, character_level=self.character_level.get(ext))
                 for ext, vocab, sentence in zip(self.extensions, self.vocabs, sentence_tuple)
             ]
@@ -160,15 +162,8 @@ class TranslationModel:
                                    for i in trg_token_ids_]
                     trg_tokens.append(trg_tokens_)
 
-                if self.pred_edits:
-                    # first output is ops, second output is words
-                    raw = ' '.join('_'.join(tokens) for tokens in zip(*trg_tokens))
-                    trg_tokens = utils.reverse_edits(src_tokens[0].split(), trg_tokens, fix=fix_edits)
-                    trg_tokens = [token for token in trg_tokens if token not in utils._START_VOCAB]
-                    # FIXME: char-level
-                else:
-                    trg_tokens = trg_tokens[0]
-                    raw = ''.join(trg_tokens) if self.char_output else ' '.join(trg_tokens)
+                trg_tokens = trg_tokens[0]
+                raw = ''.join(trg_tokens) if self.char_output else ' '.join(trg_tokens)
 
                 if remove_unk:
                     trg_tokens = [token for token in trg_tokens if token != utils._UNK]
@@ -180,11 +175,15 @@ class TranslationModel:
 
 
     def align(self, sess, output=None, align_encoder_id=0, **kwargs):
+        if self.binary and any(self.binary):
+            raise NotImplementedError  # FIXME
+
         if len(self.filenames.test) != len(self.extensions):
             raise Exception('wrong number of input files')
 
         for line_id, lines in enumerate(utils.read_lines(self.filenames.test)):
             token_ids = [
+                sentence if vocab is None else
                 utils.sentence_to_token_ids(sentence, vocab.vocab, character_level=self.character_level.get(ext))
                 for ext, vocab, sentence in zip(self.extensions, self.vocabs, lines)
             ]
@@ -195,19 +194,6 @@ class TranslationModel:
             trg_vocab = self.trg_vocab[0]      # FIXME
             trg_token_ids = token_ids[len(self.src_ext)]
             trg_tokens = [trg_vocab.reverse[i] if i < len(trg_vocab.reverse) else utils._UNK for i in trg_token_ids]
-
-            # if self.pred_edits:
-            #     src_tokens = lines[0].split()
-            #     new_trg_tokens = []
-            #     for trg_token in trg_tokens:
-            #         if len(src_tokens) > 0 and trg_token == utils._KEEP or trg_token == utils._DEL:
-            #             src_token = src_tokens.pop(0)
-            #             trg_token = '{} {}'.format(src_token, trg_token)
-            #         else:
-            #             trg_token = '{} {}'.format(trg_token, utils._INS)
-            #
-            #         new_trg_tokens.append(trg_token)
-            #     trg_tokens = new_trg_tokens
 
             weights = weights.squeeze()
             max_len = weights.shape[1]
@@ -255,7 +241,7 @@ class TranslationModel:
                 output_file.close()
 
     def evaluate(self, sess, beam_size, score_function, on_dev=True, output=None, remove_unk=False, max_dev_size=None,
-                 script_dir='scripts', early_stopping=True, raw_output=False, fix_edits=True, **kwargs):
+                 script_dir='scripts', early_stopping=True, raw_output=False, **kwargs):
         """
         :param score_function: name of the scoring function used to score and rank models
           (typically 'bleu_score')
@@ -286,7 +272,7 @@ class TranslationModel:
             if self.ref_ext is not None:
                 extensions.append(self.ref_ext)
 
-            lines = list(utils.read_lines(filenames_))
+            lines = list(utils.read_lines(filenames_, binary=self.binary))
             if on_dev and max_dev_size:
                 lines = lines[:max_dev_size]
 
@@ -305,8 +291,7 @@ class TranslationModel:
                 trg_sentences = list(zip(*lines_[len(self.src_ext):]))
 
                 hypothesis_iter = self.decode_batch(sess, lines, self.batch_size, beam_size=beam_size,
-                                                    early_stopping=early_stopping, remove_unk=remove_unk,
-                                                    fix_edits=fix_edits)
+                                                    early_stopping=early_stopping, remove_unk=remove_unk)
 
                 for i, (sources, hypothesis, reference) in enumerate(zip(src_sentences, hypothesis_iter,
                                                                          trg_sentences)):

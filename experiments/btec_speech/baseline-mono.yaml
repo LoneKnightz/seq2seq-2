@@ -1,0 +1,43 @@
+label: 'baseline-mono'
+description: "mono-speaker baseline on BTEC"
+
+dropout_rate: 0.5
+bidir: True
+use_lstm: True
+
+data_dir: experiments/btec_speech/data
+model_dir: experiments/btec_speech/baseline_mono
+log_file: experiments/btec_speech/baseline_mono/log.txt
+
+optimizer: 'adam'
+max_steps: 20000
+batch_size: 64
+steps_per_checkpoint: 1000
+steps_per_eval: 1000
+
+train_prefix: train.Michel   # 'easy' mono-speaker settings
+dev_prefix: dev.Michel
+
+cell_size: 256
+embedding_size: 256
+attn_size: 256
+
+encoders:
+  - name: feats41
+    embedding_size: 41
+    layers: 3
+    time_pooling: [2, 2]
+    pooling_avg: True
+    binary: True
+    attention_filters: 1
+    attention_filter_length: 25
+    max_len: 600
+    #input_layers: [256, 256]
+
+decoders:
+  -  name: en
+     layers: 2
+     max_len: 25
+     maxout: True
+     vanilla: True
+     attn_prev_word: True

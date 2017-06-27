@@ -1,0 +1,44 @@
+
+dropout_rate: 0.5
+bidir: True
+use_lstm: True
+
+data_dir: experiments/btec_speech/data
+model_dir: experiments/btec_speech/baseline_multi
+log_file: experiments/btec_speech/baseline_multi/log.txt
+
+max_output_len: 25
+max_input_len: 600
+optimizer: 'adam'
+max_steps: 20000
+batch_size: 64
+steps_per_checkpoint: 1000
+steps_per_eval: 1000
+
+train_prefix: train.concat  # Michel, Philippe, Loic, Marion, Helene, Fabienne
+dev_prefix: dev.Agnes       # different speaker
+
+cell_size: 256
+embedding_size: 256
+attn_size: 256
+
+max_gradient_norm: 1.0
+batch_mode: 'standard'
+read_ahead: 10
+score_function: corpus_scores
+
+encoders:
+  - name: feats41
+    embedding_size: 41
+    layers: 3
+    time_pooling: [2, 2]
+    pooling_avg: True
+    binary: True
+    attention_filters: 1
+    attention_filter_length: 25
+    input_layers: [256, 256]
+
+decoder:
+    name: en
+    layers: 2
+

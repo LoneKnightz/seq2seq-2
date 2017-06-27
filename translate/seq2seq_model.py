@@ -10,7 +10,7 @@ from collections import namedtuple
 class Seq2SeqModel(object):
     def __init__(self, encoders, decoders, learning_rate, global_step, max_gradient_norm, dropout_rate=0.0,
                  freeze_variables=None, feed_previous=0.0, optimizer='sgd', decode_only=False, len_normalization=1.0,
-                 name=None, chained_encoders=False, dual_output=False, pred_edits=False, **kwargs):
+                 name=None, **kwargs):
         self.encoders = encoders
         self.decoders = decoders
         self.name = name
@@ -35,25 +35,25 @@ class Seq2SeqModel(object):
         self.encoder_inputs = []
         self.input_weights = []
 
-        self.encoder_inputs = [
-            tf.placeholder(tf.int32, shape=[None, None], name='encoder_{}'.format(encoder.name))
-            for encoder in encoders
-        ]
+        self.encoder_inputs = []
+        self.encoder_input_length = []
+        for encoder in encoders:
+            shape = [None, None, encoder.embedding_size] if encoder.binary else [None, None]
+            dtype = tf.float32 if encoder.binary else tf.int32
+            encoder_input = tf.placeholder(dtype=dtype, shape=shape, name='encoder_{}'.format(encoder.name))
+            encoder_input_length = tf.placeholder(dtype=tf.int32, shape=[None],
+                                                  name='encoder_input_length_{}'.format(encoder.name))
+            self.encoder_inputs.append(encoder_input)
+            self.encoder_input_length.append(encoder_input_length)
+
         # starts with BOS, and ends with EOS
         self.targets = tuple([
             tf.placeholder(tf.int32, shape=[None, None], name='target_{}'.format(decoder.name))
             for decoder in decoders
         ])
 
-        if chained_encoders and pred_edits:
-            architecture = models.chained_encoder_decoder
-        elif dual_output or pred_edits:
-            architecture = models.multi_encoder_decoder
-        else:
-            architecture = models.encoder_decoder
-
-        tensors = architecture(encoders, decoders, self.dropout, self.encoder_inputs, self.targets, self.feed_previous,
-                               **kwargs)
+        tensors = models.encoder_decoder(encoders, decoders, self.dropout, self.encoder_inputs, self.targets,
+                                         self.feed_previous, encoder_input_length=self.encoder_input_length, **kwargs)
         (self.xent_loss, self.outputs, self.encoder_state, self.attention_states, self.attention_weights,
          self.beam_tensors) = tensors
 
@@ -105,38 +105,18 @@ class Seq2SeqModel(object):
         if self.dropout is not None:
             session.run(self.dropout_on)
 
-        encoder_inputs, targets = self.get_batch(data)
+        encoder_inputs, targets, input_length = self.get_batch(data)
         input_feed = {self.targets: targets}
 
         for i in range(len(self.encoders)):
             input_feed[self.encoder_inputs[i]] = encoder_inputs[i]
+            input_feed[self.encoder_input_length[i]] = input_length[i]
 
         output_feed = {'loss': self.xent_loss}
         if update_model:
             output_feed['updates'] = self.sgd_update_op if use_sgd else self.update_op
         if align:
             output_feed['weights'] = self.attention_weights
-
-        embedding = tf.get_default_graph().get_tensor_by_name('embedding_fr:0')
-        j = next(i for i, v in enumerate(self.params) if v.name == 'embedding_fr:0')
-        gradient = self.gradients[j]
-        embedding_ = session.run(embedding)
-        gradient_ = session.run(gradient, input_feed)
-        outputs_ = session.run(self.outputs[0], input_feed)
-        flattened = gradient_.values.flatten()
-
-        def stats(flattened, header):
-            zero_values = np.count_nonzero(flattened == 0)
-            nan_values = np.count_nonzero(np.isnan(flattened))
-            large_values = np.count_nonzero(flattened > 100)
-
-            if nan_values > 0 or large_values > 0 or zero_values > 0.9 * flattened.shape[0]:
-                utils.debug('{} NaN: {}, large: {}, zero: {:.1f}%'.format(
-                    header, nan_values, large_values, 100 * zero_values / flattened.shape[0]))
-
-        stats(flattened,            'gradients: ')
-        stats(embedding_.flatten(), 'embeddings:')
-        stats(outputs_.flatten(),   'outputs:   ')
 
         res = session.run(output_feed, input_feed)
 
@@ -156,12 +136,13 @@ class Seq2SeqModel(object):
         ]
 
         batch = self.get_batch(data, decoding=True)
-        encoder_inputs, targets = batch
+        encoder_inputs, targets, input_length = batch
 
         input_feed = {self.targets: targets, self.feed_previous: 1.0}
 
         for i in range(len(self.encoders)):
             input_feed[self.encoder_inputs[i]] = encoder_inputs[i]
+            input_feed[self.encoder_input_length[i]] = input_length[i]
 
         outputs = session.run(self.outputs, input_feed)
 
@@ -193,12 +174,13 @@ class Seq2SeqModel(object):
                 session_.run(self.dropout_off)
 
         data = [token_ids + [[]]]
-        encoder_inputs, targets = self.get_batch(data, decoding=True)
+        encoder_inputs, targets, input_length = self.get_batch(data, decoding=True)
         targets = targets[0]  # multi-decoder not supported
         input_feed = {}
 
         for i in range(len(self.encoders)):
             input_feed[self.encoder_inputs[i]] = encoder_inputs[i]
+            input_feed[self.encoder_input_length[i]] = input_length[i]
 
         output_feed = [self.encoder_state] + self.attention_states
         res = [session_.run(output_feed, input_feed) for session_ in session]
@@ -228,6 +210,7 @@ class Seq2SeqModel(object):
             for feed, attn_states_ in zip(input_feed, attn_states):
                 for i in range(len(self.encoders)):
                     feed[self.encoder_inputs[i]] = encoder_inputs[i]
+                    feed[self.encoder_input_length[i]] = input_length[i]
                     feed[self.attention_states[i]] = attn_states_[i].repeat(batch_size, axis=0)
 
             output_feed = [self.beam_tensors.new_data, self.beam_output]
@@ -255,11 +238,6 @@ class Seq2SeqModel(object):
             for flat_id, hyp_id, token_id in zip(flat_ids, hyp_ids, token_ids_):
                 hypothesis = hypotheses[hyp_id] + [token_id]
                 score = scores_[flat_id]
-
-                if self.decoders[0].pred_edits:
-                    # always follow greedy recommendation
-                    op_id = min(token_id, len(utils._START_VOCAB))
-                    greedy_tokens.setdefault(hyp_id, op_id)
 
                 if token_id == utils.EOS_ID:
                     # hypothesis is finished, it is thus unnecessary to keep expanding it
@@ -308,12 +286,13 @@ class Seq2SeqModel(object):
             session.run(self.dropout_off)
 
         data = [token_ids + [[]]]
-        encoder_inputs, targets = self.get_batch(data, decoding=True)
+        encoder_inputs, targets, input_length = self.get_batch(data, decoding=True)
         targets = targets[0]  # multi-decoder not supported
         input_feed = {}
 
         for i in range(len(self.encoders)):
             input_feed[self.encoder_inputs[i]] = encoder_inputs[i]
+            input_feed[self.encoder_input_length[i]] = input_length[i]
 
         output_feed = [self.encoder_state] + self.attention_states
         state, *attn_states = session.run(output_feed, input_feed)
@@ -340,6 +319,7 @@ class Seq2SeqModel(object):
 
             for i in range(len(self.encoders)):
                 input_feed[self.encoder_inputs[i]] = encoder_inputs[i]
+                input_feed[self.encoder_input_length[i]] = input_length[i]
                 input_feed[self.attention_states[i]] = attn_states[i].repeat(batch_size, axis=0)
 
             output_feed = [self.beam_tensors.new_data, self.beam_output]
@@ -404,7 +384,7 @@ class Seq2SeqModel(object):
 
         return hypotheses, scores
 
-    def get_batch(self, data, decoding=False):
+    def get_batch(self, data, binary=None, decoding=False):
         """
         :param data:
         :param decoding: set this parameter to True to output dummy
@@ -413,6 +393,7 @@ class Seq2SeqModel(object):
         """
         inputs = [[] for _ in self.encoders]
         targets = [[] for _ in self.decoders]
+        input_length = [[] for _ in self.encoders]
 
         # maximum input length of each encoder in this batch
         max_input_len = [max(len(data_[i]) for data_ in data) for i in range(len(self.encoders))]
@@ -433,10 +414,12 @@ class Seq2SeqModel(object):
             trg_sentences = sentences[len(self.encoders):]
 
             for i, (encoder, src_sentence) in enumerate(zip(self.encoders, src_sentences)):
-                # pad sequences so that all sequences in the same batch have the same length
                 src_sentence = src_sentence[:max_input_len[i]]
-                encoder_pad = [utils.EOS_ID] * (1 + max_input_len[i] - len(src_sentence))
+                pad_symbol = np.zeros(encoder.embedding_size, dtype=np.float32) if encoder.binary else utils.EOS_ID
+                # pad sequences so that all sequences in the same batch have the same length
+                encoder_pad = [pad_symbol] * (1 + max_input_len[i] - len(src_sentence))
                 inputs[i].append(src_sentence + encoder_pad)
+                input_length[i].append(len(src_sentence) + 1)
 
             for i in range(len(targets)):
                 if decoding:
@@ -448,8 +431,10 @@ class Seq2SeqModel(object):
                     targets[i].append(trg_sentence)
 
         # convert lists to numpy arrays
-        inputs = [np.array(inputs_, dtype=np.int32) for inputs_ in inputs]
+        inputs = [np.array(inputs_, dtype=np.float32 if encoder.binary else np.int32)
+                  for encoder, inputs_ in zip(self.encoders, inputs)]
         # starts with BOS and ends with EOS
         targets = [np.array(targets_, dtype=np.int32) for targets_ in targets]
+        input_length = [np.array(input_length_, dtype=np.int32) for input_length_ in input_length]
 
-        return inputs, targets
+        return inputs, targets, input_length
