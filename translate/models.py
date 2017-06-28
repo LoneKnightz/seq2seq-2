@@ -634,14 +634,14 @@ def sequence_loss(logits, targets, weights, average_across_timesteps=True, avera
     log_perp = tf.reduce_sum(crossent * weights, axis=1)
 
     if average_across_timesteps:
-        total_size = tf.reduce_sum(weights, 0)
+        total_size = tf.reduce_sum(weights, axis=1)
         total_size += 1e-12  # just to avoid division by 0 for all-0 weights
         log_perp /= total_size
 
     cost = tf.reduce_sum(log_perp)
 
     if average_across_batch:
-        return cost / tf.cast(batch_size, tf.float32)
+        return cost / tf.to_float(batch_size)
     else:
         return cost
 
