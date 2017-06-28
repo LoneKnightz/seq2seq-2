@@ -524,16 +524,39 @@ class TranslationModel:
         save_checkpoint(sess, self.saver, self.checkpoint_dir, self.global_step)
 
 
+# variable_mapping = [   # for backward compatibility with old models
+#     (r'encoder_(.*?)/forward_1/initial_state', r'encoder_\1/initial_state_fw'),
+#     (r'encoder_(.*?)/backward_1/initial_state', r'encoder_\1/initial_state_bw'),
+#     (r'encoder_(.*?)/forward_1/basic_lstm_cell', r'encoder_\1/stack_bidirectional_rnn/cell_0/bidirectional_rnn/fw/layer_norm_basic_lstm_cell'),
+#     (r'encoder_(.*?)/backward_1/basic_lstm_cell', r'encoder_\1/stack_bidirectional_rnn/cell_0/bidirectional_rnn/bw/layer_norm_basic_lstm_cell'),
+#     (r'decoder_(.*?)/basic_lstm_cell', r'decoder_\1/layer_norm_basic_lstm_cell'),
+#     (r'map_attns/Matrix', r'map_attns/matrix'),
+#     (r'Matrix', r'kernel'),
+#     (r'Bias', r'bias'),
+# ]
 variable_mapping = [   # for backward compatibility with old models
-    (r'encoder_(.*?)/forward_1/initial_state', r'encoder_\1/initial_state_fw'),
-    (r'encoder_(.*?)/backward_1/initial_state', r'encoder_\1/initial_state_bw'),
-    (r'encoder_(.*?)/forward_1/basic_lstm_cell', r'encoder_\1/stack_bidirectional_rnn/cell_0/bidirectional_rnn/fw/layer_norm_basic_lstm_cell'),
-    (r'encoder_(.*?)/backward_1/basic_lstm_cell', r'encoder_\1/stack_bidirectional_rnn/cell_0/bidirectional_rnn/bw/layer_norm_basic_lstm_cell'),
-    (r'decoder_(.*?)/basic_lstm_cell', r'decoder_\1/layer_norm_basic_lstm_cell'),
-    (r'map_attns/Matrix', r'map_attns/matrix'),
+    (r'seq2seq/', r''),
+    (r'multi_encoder/(.*?)/MultiBiRNN_FW_(.*?)/BasicLSTMCell/Linear',
+     r'encoder_\1/stack_bidirectional_rnn/cell_\2/bidirectional_rnn/fw/layer_norm_basic_lstm_cell'),
+    (r'decoder_(.*?)/MultiRNNCell/Cell(.*?)/BasicLSTMCell/Linear',
+     r'decoder_\1/multi_rnn_cell/cell_\2/layer_norm_basic_lstm_cell'),
+    (r'multi_encoder/(.*?)/input_layer_(.*?)/',
+     r'encoder_\1/layer_\2/'),
+    (r'attention/filter_(.*?)', r'attention/filter'),
+    (r'attention/U_(.*?)', r'attention/U'),
+    (r'attention/W_(.*?)', r'attention/W'),
+    (r'attention/V_(.*?)', r'attention/V'),
+    (r'attention/Linear', r'attention/y'),
+    # (r'encoder_(.*?)/forward_1/initial_state', r'encoder_\1/initial_state_fw'),
+    # (r'encoder_(.*?)/backward_1/initial_state', r'encoder_\1/initial_state_bw'),
+    # (r'encoder_(.*?)/forward_1/basic_lstm_cell', r'encoder_\1/stack_bidirectional_rnn/cell_0/bidirectional_rnn/fw/layer_norm_basic_lstm_cell'),
+    # (r'encoder_(.*?)/backward_1/basic_lstm_cell', r'encoder_\1/stack_bidirectional_rnn/cell_0/bidirectional_rnn/bw/layer_norm_basic_lstm_cell'),
+    # (r'decoder_(.*?)/basic_lstm_cell', r'decoder_\1/layer_norm_basic_lstm_cell'),
+    # (r'map_attns/Matrix', r'map_attns/matrix'),
     (r'Matrix', r'kernel'),
     (r'Bias', r'bias'),
 ]
+
 
 
 def load_checkpoint(sess, checkpoint_dir, filename=None, blacklist=()):
