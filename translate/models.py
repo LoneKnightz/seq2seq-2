@@ -621,7 +621,7 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
         return proj_outputs, weights, states, attns, beam_tensors
 
 
-def sequence_loss(logits, targets, weights, average_across_timesteps=False, average_across_batch=True):
+def sequence_loss(logits, targets, weights, average_across_timesteps=True, average_across_batch=True):
     batch_size = tf.shape(targets)[0]
     time_steps = tf.shape(targets)[1]
 
