@@ -397,9 +397,10 @@ class Seq2SeqModel(object):
                 src_sentence = src_sentence[:max_input_len[i]]
                 pad_symbol = np.zeros(encoder.embedding_size, dtype=np.float32) if encoder.binary else utils.EOS_ID
                 # pad sequences so that all sequences in the same batch have the same length
-                encoder_pad = [pad_symbol] * (1 + max_input_len[i] - len(src_sentence))
+                #encoder_pad = [pad_symbol] * (1 + max_input_len[i] - len(src_sentence))
+                encoder_pad = [pad_symbol] * (max_input_len[i] - len(src_sentence))
                 inputs[i].append(src_sentence + encoder_pad)
-                input_length[i].append(len(src_sentence) + 1)
+                input_length[i].append(len(src_sentence))
 
             for i in range(len(targets)):
                 if decoding:

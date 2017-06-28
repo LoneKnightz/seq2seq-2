@@ -350,7 +350,7 @@ def get_batches(data, batch_size, batches=0, allow_smaller=True):
     return batches
 
 
-def read_binary_features(filename):
+def read_binary_features(filename, from_position=None):
     """
     Reads a binary file containing vector features. First two (int32) numbers correspond to
     number of entries (lines), and dimension of the vectors.
@@ -366,13 +366,21 @@ def read_binary_features(filename):
 
     with open(filename, 'rb') as f:
         lines, dim = struct.unpack('ii', f.read(8))
-        for _ in range(lines):
-            frames, = struct.unpack('i', f.read(4))
-            n = frames * dim
-            feats = struct.unpack('f' * n, f.read(4 * n))
-            all_feats.append(list(np.array(feats).reshape(frames, dim)))
+        if from_position is not None:
+            f.seek(from_position)
 
-    return all_feats
+        while True:
+            x = f.read(4)
+            if len(x) < 4:
+                break
+            frames, = struct.unpack('i', x)
+            n = frames * dim
+            x = f.read(4 * n)
+            if len(x) < 4 * n:
+                break
+            feats = struct.unpack('f' * n, x)
+            #yield list(np.array(feats).reshape(frames, dim)), f.tell()
+            yield list(np.array(feats).reshape(frames, dim))
 
 
 def read_lines(paths, binary=None):
@@ -384,7 +392,24 @@ def read_lines(paths, binary=None):
 
 def read_lines_from_position(paths, from_position=None, binary=None):
     if binary is not None and any(binary):
-        raise NotImplementedError  # TODO
+       raise NotImplementedError  # TODO
+
+    # def read_text(path, from_position=None):
+    #     with open(path) as f:
+    #         if from_position is not None:
+    #             f.seek(from_position)
+    #         while True:
+    #             line = f.readline()
+    #             if not line:
+    #                 break
+    #             yield line, f.tell()
+    #
+    # iterators = [
+    #     read_binary_features(path, from_position_) if binary_ else
+    #     read_text(path, from_position_)
+    #     for path, binary_, from_position_ in zip(paths, binary, from_position)
+    # ]
+
     with open_files(paths) as files:
         if from_position:
             for path, file_, position in zip(paths, files, from_position):

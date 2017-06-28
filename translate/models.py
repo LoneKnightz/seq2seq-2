@@ -1,5 +1,6 @@
 import tensorflow as tf
 import functools
+import math
 from tensorflow.contrib.rnn import BasicLSTMCell, DropoutWrapper, LayerNormBasicLSTMCell, RNNCell
 from tensorflow.contrib.rnn import MultiRNNCell, LSTMStateTuple, GRUCell
 from translate.rnn import stack_bidirectional_dynamic_rnn
@@ -76,9 +77,12 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
             continue
         # inputs are token ids, which need to be mapped to vectors (embeddings)
         embedding_shape = [encoder.vocab_size, encoder.embedding_size]
+        initializer = tf.random_uniform_initializer(-math.sqrt(3), math.sqrt(3))  # FIXME
+
         device = '/cpu:0' if encoder.embeddings_on_cpu else None
         with tf.device(device):
-            embedding = get_variable('embedding_{}'.format(encoder.name), shape=embedding_shape)
+            embedding = get_variable('embedding_{}'.format(encoder.name), shape=embedding_shape,
+                                     initializer=initializer)
         embedding_variables.append(embedding)
 
     new_encoder_input_length = []
@@ -290,7 +294,7 @@ def compute_energy_with_filter(hidden, state, prev_weights, attention_filters, a
 def global_attention(state, hidden_states, encoder, encoder_input_length, scope=None, context=None,
                      **kwargs):
     with tf.variable_scope(scope or 'attention'):
-        if context is not None and encoder.use_context:
+        if context is not None and encoder.use_context:  # FIXME
             state = tf.concat([state, context], axis=1)
 
         if encoder.attention_filters:
@@ -300,7 +304,7 @@ def global_attention(state, hidden_states, encoder, encoder_input_length, scope=
         else:
             e = compute_energy(hidden_states, state, attn_size=encoder.attn_size, **kwargs)
 
-        e -= tf.reduce_max(e, axis=1, keep_dims=True)
+        #e -= tf.reduce_max(e, axis=1, keep_dims=True)  # FIXME
 
         mask = tf.sequence_mask(tf.cast(encoder_input_length, tf.int32), tf.shape(hidden_states)[1],
                                 dtype=tf.float32)
