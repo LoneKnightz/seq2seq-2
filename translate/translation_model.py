@@ -109,8 +109,10 @@ class TranslationModel:
                 for batch in dev_batches
             )
             eval_loss /= sum(map(len, dev_batches))
+            perplexity = math.exp(eval_loss) if eval_loss < 300 else float('inf')
 
-            utils.log("  {} eval: loss {:.2f}".format(prefix, eval_loss))
+            utils.log("  {} eval: perplexity {:.2f}".format(prefix, perplexity))
+
 
     def decode_sentence(self, sess, sentence_tuple, beam_size=1, remove_unk=False, early_stopping=True):
         return next(self.decode_batch(sess, [sentence_tuple], beam_size, remove_unk, early_stopping))
@@ -400,8 +402,10 @@ class TranslationModel:
             loss = self.training.loss / self.training.steps
             step_time = self.training.time / self.training.steps
 
-            summary = 'step {} epoch {} learning rate {:.4f} step-time {:.4f} loss {:.4f}'.format(
-                global_step, epoch + 1, self.learning_rate.eval(), step_time, loss)
+            perplexity = math.exp(loss) if loss < 300 else float('inf')
+
+            summary = 'step {} epoch {} learning rate {:.4f} step-time {:.4f} perplexity {:.4f}'.format(
+                global_step, epoch + 1, self.learning_rate.eval(), step_time, perplexity)
             if self.name is not None:
                 summary = '{} {}'.format(self.name, summary)
             utils.log(summary)
