@@ -183,8 +183,11 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                 state_size = state_size.c + state_size.h
 
             def get_initial_state(name='initial_state'):
-                initial_state = get_variable(name, initializer=tf.zeros(state_size))
-                return tf.tile(tf.expand_dims(initial_state, axis=0), [batch_size, 1])
+                if encoder.trainable_initial_states:
+                    initial_state = get_variable(name, initializer=tf.zeros(state_size))
+                    return tf.tile(tf.expand_dims(initial_state, axis=0), [batch_size, 1])
+                else:
+                    return None
 
             if encoder.bidir:
                 rnn = lambda reuse: stack_bidirectional_dynamic_rnn(
@@ -192,15 +195,25 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                     cells_bw=[get_cell(reuse=reuse) for _ in range(encoder.layers)],
                     initial_states_fw=[get_initial_state('initial_state_fw')] * encoder.layers,
                     initial_states_bw=[get_initial_state('initial_state_bw')] * encoder.layers,
-                    **parameters)[0]
+                    **parameters)
 
                 try:
-                    encoder_outputs_ = rnn(reuse=False)
+                    encoder_outputs_, _, backward_states = rnn(reuse=False)
                 except ValueError:   # Multi-task scenario where we're reusing the same RNN parameters
-                    encoder_outputs_ = rnn(reuse=True)
+                    encoder_outputs_, _, backward_states = rnn(reuse=True)
 
-                encoder_state_ = encoder_outputs_[:, 0, encoder.cell_size:]  # first backward output
+                if encoder.concat_last_states:
+                    encoder_state_ = tf.concat(backward_states, axis=1)  # concats last states of all layers
+                else:  # uses output, not state (which are different for LSTMs), and only the last layer's
+                    encoder_state_ = encoder_outputs_[:, 0, encoder.cell_size:]  # first backward output
+
+                if encoder.bidir_projection:
+                    encoder_outputs_ = dense(encoder_outputs_, encoder.cell_size, use_bias=False,
+                                             name='bidir_projection')
+
             else:
+                if encoder.concat_last_states:
+                    raise NotImplementedError
                 if encoder.time_pooling:
                     raise NotImplementedError
 
@@ -475,7 +488,9 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
         if dropout is not None:
             initial_state = tf.nn.dropout(initial_state, dropout)
 
-        state = dense(initial_state, state_size, use_bias=True, name='initial_state_projection', activation=tf.nn.tanh)
+        # FIXME (bias)
+        state = dense(initial_state, state_size, use_bias=False, name='initial_state_projection',
+                      activation=tf.nn.tanh)
 
         time = tf.constant(0, dtype=tf.int32, name='time')
 
@@ -498,11 +513,9 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
         def get_next_state(x, state, scope=None):
             def fun():
                 try:
-                    _, new_state = get_cell()(x, state)
+                    return get_cell()(x, state)
                 except ValueError:  # auto_reuse doesn't work with LSTM cells
-                    _, new_state = get_cell(reuse=True)(x, state)
-                return new_state
-
+                    return get_cell(reuse=True)(x, state)
             if scope is not None:
                 with tf.variable_scope(scope):
                     return fun()
@@ -511,15 +524,18 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
 
         def _time_step(time, input_, context, state, proj_outputs, states, weights, attns, prev_weights):
             rnn_input = input_
+            rnn_output = None
 
             if not decoder.vanilla:
                 if decoder.input_attention:
                     rnn_input = tf.concat([rnn_input, context], axis=1)
-                state = tf.cond(
-                    tf.equal(time, 0),
-                    lambda: state,
-                    lambda: get_next_state(rnn_input, state)
-                )
+
+                next_state = lambda: get_next_state(rnn_input, state)
+                if decoder.state_zero:
+                    state_zero = next_state
+                else:
+                    state_zero = state
+                rnn_output, state = tf.cond(tf.equal(time, 0), state_zero, next_state)
 
             attn_input = state
             if decoder.attn_prev_word:
@@ -533,11 +549,12 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
             if decoder.vanilla:
                 if decoder.input_attention:
                     rnn_input = tf.concat([rnn_input, context], axis=1)
-                state = get_next_state(rnn_input, state)
+                rnn_output, state = get_next_state(rnn_input, state)
 
             states = states.write(time, state)
 
-            projection_input = [state, context]
+            projection_input = [state] if decoder.use_lstm_state else [rnn_output]
+            projection_input.append(context)
             if decoder.use_previous_word:
                 projection_input.insert(1, input_)
 
@@ -549,13 +566,19 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
                                     padding='SAME', strides=[2])
                 output_ = tf.squeeze(output_, axis=2)
 
-            output_ = dense(output_, decoder.embedding_size, use_bias=False, name='softmax0')
+            if decoder.output_extra_proj:
+                # intermediate projection to embedding size (before projecting to vocabulary size)
+                # this is useful to reduce the number of parameters, and
+                # to use the output embeddings for output projection (tie_embeddings parameter)
+                output_ = dense(output_, decoder.embedding_size, use_bias=False, name='softmax0')
 
-            if decoder.tie_embeddings:
-                bias = get_variable('softmax1/bias', shape=[decoder.vocab_size])
-                output_ = tf.matmul(output_, tf.transpose(embedding)) + bias
+                if decoder.tie_embeddings:
+                    bias = get_variable('softmax1/bias', shape=[decoder.vocab_size])
+                    output_ = tf.matmul(output_, tf.transpose(embedding)) + bias
+                else:
+                    output_ = dense(output_, output_size, use_bias=True, name='softmax1')
             else:
-                output_ = dense(output_, output_size, use_bias=True, name='softmax1')
+                output_ = dense(output_, output_size, use_bias=True, name='softmax')
 
             proj_outputs = proj_outputs.write(time, output_)
 

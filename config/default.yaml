@@ -55,10 +55,16 @@ tie_embeddings: False    # use same parameters for output projection and output 
 maxout: True             # parameters of the decoder
 input_attention: True    # use attention as input to the LSTM
 use_previous_word: True  # use previous word when predicting a new word
-vanilla: False           # use a vanilla decoder
+vanilla: False           # use same decoder as Bahdanau et al.
 attn_prev_word: False    # use the previous word in the attention model
 maxout_stride: null      # apply maxout with this stride on the input sequence (after potential convolutions)
 convolutions: null       # perform 1-D convolutions on the output sequence
+state_zero: False        # if False s_1 = s_0, otherwise s_1 = next(s_0) (not supported by vanilla decoder)
+use_lstm_state: True     # use the entire LSTM state instead of its output to predict next word
+output_extra_proj: True  # do an intermediate output projection to embedding size (necessary for tie_embeddings)
+bidir_projection: False  # do a projection on the bidir encoder states, to obtain the same dim as an unidir encoder
+concat_last_states: False # initial state of the decoder is a concatenation of all layers' last states
+
 
 # data
 data_dir: data           # directory containing the training data

@@ -28,18 +28,24 @@ encoders:
     time_pooling: [4]
     pooling_avg: True
     binary: True
+    attention_filters: 1
+    attention_filter_length: 25
     max_len: 400
-    attention_filters: 2
-    attention_filter_length: 20
+    concat_last_states: True
+    bidir_projection: True
+    trainable_initial_states: False
 
 decoders:
   - name: en
-    layers: 1
+    layers: 2
     max_len: 18
     maxout: False
     input_attention: False
     use_previous_word: False
     vanilla: False
+    state_zero: True
+    use_lstm_state: False
+    output_extra_proj: False
     attn_prev_word: False
     maxout_stride: null
     convolutions: null

@@ -32,15 +32,21 @@ encoders:
     attention_filter_length: 25
     max_len: 600
     input_layers: [256, 256]
+    concat_last_states: True
+    bidir_projection: True
+    trainable_initial_states: False
 
 decoders:
   - name: en
     layers: 2
     max_len: 25
-    maxout: True
+    maxout: False
     input_attention: False
     use_previous_word: False
     vanilla: False
+    state_zero: True
+    use_lstm_state: False
+    output_extra_proj: False
     attn_prev_word: False
     maxout_stride: null
     convolutions: null
