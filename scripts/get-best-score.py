@@ -7,7 +7,7 @@ import re
 parser = argparse.ArgumentParser()
 parser.add_argument('log_file')
 parser.add_argument('--dev-prefix')
-parser.add_argument('--score', default='ter', choices=('ter', 'bleu', 'wer'))
+parser.add_argument('--score', default='bleu', choices=('ter', 'bleu', 'wer'))
 parser.add_argument('--task-name')
 
 if __name__ == '__main__':
