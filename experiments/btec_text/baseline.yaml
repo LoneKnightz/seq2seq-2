@@ -1,25 +1,42 @@
+label: 'BTEC'
+description: "baseline BTEC config"
 
 dropout_rate: 0.5
 cell_size: 256
-embedding_size: 256
-layers: 2
+attn_size: 256
+embedding_size: 128
+
+layers: 1
 bidir: True
-use_lstm: True
-steps_per_checkpoint: 1000
-steps_per_eval: 2000
-max_steps: 20000
-optimizer: 'adam'
-learning_rate: 0.001
-num_samples: 0
+use_lstm: False
+weight_scale: 0.1
 
 data_dir: experiments/btec_text/data
 model_dir: experiments/btec_text/baseline
-log_file: experiments/btec_text/baseline/log.txt
+batch_size: 32
+dev_prefix: dev
+
+optimizer: 'adam'
+learning_rate: 0.001
+
+sgd_after_n_epoch: 20
+sgd_learning_rate: 0.2
+learning_rate_decay_factor: 0.9
+decay_every_n_epoch: 1
+decay_after_n_epoch: 21
+
+steps_per_checkpoint: 1000
+steps_per_eval: 1000
+
+max_gradient_norm: 1.0
+max_epochs: 0
+batch_mode: 'standard'
+read_ahead: 10
+
+max_len: 25
 
 encoders:
   - name: fr
-    vocab_size: 9218
 
-decoder:
-    name: en
-    vocab_size: 7186
+decoders:
+  - name: en

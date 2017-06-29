@@ -16,18 +16,12 @@ python2 -m translate ${config} --decode ${data_dir}/test1 --output ${ensemble_di
 python2 -m translate ${config} --decode ${data_dir}/test2 --output ${ensemble_dir}/test2.beam8.out ${parameters}
 python2 -m translate ${config} --decode ${data_dir}/train.1000 --output ${ensemble_dir}/train.1000.beam8.out ${parameters}
 
-parameters="-v --beam-size 8 --lm-file ${data_dir}/btec.arpa --lm-weight 0.2"
-python2 -m translate ${config} --decode ${data_dir}/dev --output ${ensemble_dir}/dev.beam8.lm20.out ${parameters}
-python2 -m translate ${config} --decode ${data_dir}/test1 --output ${ensemble_dir}/test1.beam8.lm20.out ${parameters}
-python2 -m translate ${config} --decode ${data_dir}/test2 --output ${ensemble_dir}/test2.beam8.lm20.out ${parameters}
-python2 -m translate ${config} --decode ${data_dir}/train.1000 --output ${ensemble_dir}/train.1000.beam8.lm20.out ${parameters}
-
 ensemble_params="${ensemble_dir}/model_1/checkpoints/best ${ensemble_dir}/model_2/checkpoints/best ${ensemble_dir}/model_3/checkpoints/best ${ensemble_dir}/model_4/checkpoints/best ${ensemble_dir}/model_5/checkpoints/best"
-parameters="-v --beam-size 8 --lm-file ${data_dir}/btec.arpa --lm-weight 0.2 --ensemble --checkpoints ${ensemble_params}"
-python2 -m translate ${config} --decode ${data_dir}/dev --output ${ensemble_dir}/dev.beam8.lm20.ensemble.out ${parameters}
-python2 -m translate ${config} --decode ${data_dir}/test1 -v --output ${ensemble_dir}/test1.beam8.lm20.ensemble.out ${parameters}
-python2 -m translate ${config} --decode ${data_dir}/test2 -v --output ${ensemble_dir}/test2.beam8.lm20.ensemble.out ${parameters}
-python2 -m translate ${config} --decode ${data_dir}/train.1000 -v --output ${ensemble_dir}/train.1000.beam8.lm20.ensemble.out ${parameters}
+parameters="-v --beam-size 8 --ensemble --checkpoints ${ensemble_params}"
+python2 -m translate ${config} --decode ${data_dir}/dev --output ${ensemble_dir}/dev.beam8.ensemble.out ${parameters}
+python2 -m translate ${config} --decode ${data_dir}/test1 -v --output ${ensemble_dir}/test1.beam8.ensemble.out ${parameters}
+python2 -m translate ${config} --decode ${data_dir}/test2 -v --output ${ensemble_dir}/test2.beam8.ensemble.out ${parameters}
+python2 -m translate ${config} --decode ${data_dir}/train.1000 -v --output ${ensemble_dir}/train.1000.beam8.ensemble.out ${parameters}
 
 scripts/score.py ${ensemble_dir}/dev.greedy.out ${data_dir}/dev.en
 scripts/score.py ${ensemble_dir}/test1.greedy.out ${data_dir}/test1.en
@@ -45,18 +39,10 @@ scripts/score.py ${ensemble_dir}/test1.beam8.out ${data_dir}/test1.mref.en
 scripts/score.py ${ensemble_dir}/test2.beam8.out ${data_dir}/test2.mref.en
 scripts/score.py ${ensemble_dir}/train.1000.beam8.out ${data_dir}/train.1000.en
 
-scripts/score.py ${ensemble_dir}/dev.beam8.lm20.out ${data_dir}/dev.en
-scripts/score.py ${ensemble_dir}/test1.beam8.lm20.out ${data_dir}/test1.en
-scripts/score.py ${ensemble_dir}/test2.beam8.lm20.out ${data_dir}/test2.en
-scripts/score.py ${ensemble_dir}/dev.beam8.lm20.out ${data_dir}/dev.mref.en
-scripts/score.py ${ensemble_dir}/test1.beam8.lm20.out ${data_dir}/test1.mref.en
-scripts/score.py ${ensemble_dir}/test2.beam8.lm20.out ${data_dir}/test2.mref.en
-scripts/score.py ${ensemble_dir}/train.1000.beam8.lm20.out ${data_dir}/train.1000.en
-
-scripts/score.py ${ensemble_dir}/dev.beam8.lm20.ensemble.out ${data_dir}/dev.en
-scripts/score.py ${ensemble_dir}/test1.beam8.lm20.ensemble.out ${data_dir}/test1.en
-scripts/score.py ${ensemble_dir}/test2.beam8.lm20.ensemble.out ${data_dir}/test2.en
-scripts/score.py ${ensemble_dir}/dev.beam8.lm20.ensemble.out ${data_dir}/dev.mref.en
-scripts/score.py ${ensemble_dir}/test1.beam8.lm20.ensemble.out ${data_dir}/test1.mref.en
-scripts/score.py ${ensemble_dir}/test2.beam8.lm20.ensemble.out ${data_dir}/test2.mref.en
-scripts/score.py ${ensemble_dir}/train.1000.beam8.lm20.ensemble.out ${data_dir}/train.1000.en
+scripts/score.py ${ensemble_dir}/dev.beam8.ensemble.out ${data_dir}/dev.en
+scripts/score.py ${ensemble_dir}/test1.beam8.ensemble.out ${data_dir}/test1.en
+scripts/score.py ${ensemble_dir}/test2.beam8.ensemble.out ${data_dir}/test2.en
+scripts/score.py ${ensemble_dir}/dev.beam8.ensemble.out ${data_dir}/dev.mref.en
+scripts/score.py ${ensemble_dir}/test1.beam8.ensemble.out ${data_dir}/test1.mref.en
+scripts/score.py ${ensemble_dir}/test2.beam8.ensemble.out ${data_dir}/test2.mref.en
+scripts/score.py ${ensemble_dir}/train.1000.beam8.ensemble.out ${data_dir}/train.1000.en

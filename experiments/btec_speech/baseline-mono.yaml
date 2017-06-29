@@ -2,24 +2,32 @@ label: 'baseline-mono'
 description: "mono-speaker baseline on BTEC"
 
 dropout_rate: 0.5
+cell_size: 256
+attn_size: 256
+embedding_size: 256
+
+layers: 2
 bidir: True
 use_lstm: True
+weight_scale: null
 
 data_dir: experiments/btec_speech/data
 model_dir: experiments/btec_speech/baseline_mono
-
-optimizer: 'adam'
-max_steps: 20000
 batch_size: 64
-steps_per_checkpoint: 1000
-steps_per_eval: 1000
 
 train_prefix: train.Michel   # 'easy' mono-speaker settings
 dev_prefix: dev.Michel
 
-cell_size: 256
-embedding_size: 256
-attn_size: 256
+optimizer: 'adam'
+learning_rate: 0.001
+
+steps_per_checkpoint: 1000
+steps_per_eval: 1000
+
+max_gradient_norm: 5.0
+max_steps: 20000
+batch_mode: 'standard'
+read_ahead: 10
 
 encoders:
   - name: feats41

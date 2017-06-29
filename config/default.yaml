@@ -63,7 +63,6 @@ output_extra_proj: True  # do an intermediate output projection to embedding siz
 bidir_projection: False  # do a projection on the bidir encoder states, to obtain the same dim as an unidir encoder
 concat_last_states: False # initial state of the decoder is a concatenation of all layers' last states
 
-
 # data
 data_dir: data           # directory containing the training data
 model_dir: model         # directory where the model will be saved (checkpoints and eval outputs)
@@ -90,12 +89,12 @@ no_gpu: False            # don't use any GPU
 allow_growth: True       # allow GPU memory allocation to change during runtime
 mem_fraction: 1.0        # maximum fraction of GPU memory to use
 freeze_variables: []     # list of variables to freeze during training
-log_file: log.txt        # log to this file instead of standard output
-parallel_iterations: 16  # parameter of Tensorflow's while_loop
-swap_memory: True        # parameter of Tensorflow's while_loop
+log_file: log.txt        # log to this file (in addition to standard output)
+parallel_iterations: 16  # parameter of Tensorflow's while_loop (a higher number mean faster training, but more memory usage)
+swap_memory: True        # parameter of Tensorflow's while_loop (adaptively store parameters on CPU when no GPU memory is available)
 max_to_keep: 1           # keep that many latest checkpoints
 keep_every_n_hours: 0    # keep checkpoints every n hours
-embeddings_on_cpu: True
+embeddings_on_cpu: True  # store embedding matrices on CPU/GPU
 
 encoders:                # this is a list (you can specify several encoders)
   - name: fr             # each encoder or decoder has a name (used for naming variables) and an extension (for files)

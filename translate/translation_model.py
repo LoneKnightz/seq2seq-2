@@ -141,10 +141,8 @@ class TranslationModel:
             token_ids = list(map(map_to_ids, batch))
 
             if beam_search:
-                #hypotheses, _ = self.seq2seq_model.beam_search_decoding(sess, token_ids[0], beam_size,
-                #                                                        early_stopping=early_stopping)
-                hypotheses, _ = self.seq2seq_model.simple_beam_search(sess, token_ids[0], beam_size,
-                                                                      early_stopping=early_stopping)
+                hypotheses, _ = self.seq2seq_model.beam_search_decoding(sess, token_ids[0], beam_size,
+                                                                        early_stopping=early_stopping)
                 batch_token_ids = [[hypotheses[0]]]  # first hypothesis is the highest scoring one
             else:
                 batch_token_ids = self.seq2seq_model.greedy_decoding(sess, token_ids)

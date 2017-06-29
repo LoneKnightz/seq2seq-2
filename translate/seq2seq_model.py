@@ -194,7 +194,7 @@ class Seq2SeqModel(object):
             res = [session_.run(output_feed, input_feed_) for session_, input_feed_ in zip(session, input_feed)]
             beam_data, proba = list(zip(*res))
 
-            proba = [np.maximum(proba_, 1e-10) for proba_ in proba]
+            proba = [np.maximum(proba_, 1e-30) for proba_ in proba]
 
             scores_ = scores[:, None] - np.average([np.log(proba_) for proba_ in proba], axis=0)
             scores_ = scores_.flatten()
@@ -207,9 +207,11 @@ class Seq2SeqModel(object):
             new_scores = []
             new_data = [[] for _ in session]
             new_input = []
-            new_beam_size = beam_size
 
             for flat_id, hyp_id, token_id in zip(flat_ids, hyp_ids, token_ids_):
+                if len(new_hypotheses) == beam_size:
+                    break
+
                 hypothesis = hypotheses[hyp_id] + [token_id]
                 score = scores_[flat_id]
 
@@ -220,7 +222,7 @@ class Seq2SeqModel(object):
 
                     # early stop: number of possible hypotheses is reduced by one
                     if early_stopping:
-                        new_beam_size -= 1
+                        beam_size -= 1
                 else:
                     new_hypotheses.append(hypothesis)
 
@@ -230,10 +232,6 @@ class Seq2SeqModel(object):
                     new_scores.append(score)
                     new_input.append(token_id)
 
-                if len(new_hypotheses) == beam_size:
-                    break
-
-            beam_size = new_beam_size
             hypotheses = new_hypotheses
             beam_data = [np.array(data_) for data_ in new_data]
             scores = np.array(new_scores)
@@ -255,110 +253,7 @@ class Seq2SeqModel(object):
 
         return hypotheses, scores
 
-    def simple_beam_search(self, session, token_ids, beam_size, early_stopping=True):
-        if self.dropout is not None:
-            session.run(self.dropout_off)
-
-        data = [token_ids + [[]]]
-        encoder_inputs, targets, input_length = self.get_batch(data, decoding=True)
-        targets = targets[0]  # multi-decoder not supported
-        input_feed = {}
-
-        for i in range(len(self.encoders)):
-            input_feed[self.encoder_inputs[i]] = encoder_inputs[i]
-            input_feed[self.encoder_input_length[i]] = input_length[i]
-
-        output_feed = [self.encoder_state] + self.attention_states
-        state, *attn_states = session.run(output_feed, input_feed)
-
-        targets = targets[:,0]  # BOS symbol
-
-        finished_hypotheses = []
-        finished_scores = []
-
-        hypotheses = [[]]
-        scores = np.zeros([1], dtype=np.float32)
-
-        beam_data = None
-
-        for k in range(self.max_output_len[0]):
-            batch_size = targets.shape[0]
-            targets = np.reshape(targets, [batch_size, 1])
-            targets = np.concatenate([targets, np.ones(targets.shape) * utils.EOS_ID], axis=1)
-
-            input_feed = {self.targets[0]: targets}
-
-            if beam_data is not None:
-                input_feed[self.beam_tensors.data] = beam_data
-
-            for i in range(len(self.encoders)):
-                input_feed[self.encoder_inputs[i]] = encoder_inputs[i]
-                input_feed[self.encoder_input_length[i]] = input_length[i]
-                input_feed[self.attention_states[i]] = attn_states[i].repeat(batch_size, axis=0)
-
-            output_feed = [self.beam_tensors.new_data, self.beam_output]
-
-            beam_data, proba = session.run(output_feed, input_feed)
-            #proba = np.maximum(proba, 1e-30)  # FIXME
-
-            scores_ = scores[:, None] - np.log(proba)
-            scores_ = scores_.flatten()
-            flat_ids = np.argsort(scores_)
-
-            token_ids_ = flat_ids % self.decoders[0].vocab_size
-            hyp_ids = flat_ids // self.decoders[0].vocab_size
-
-            new_hypotheses = []
-            new_scores = []
-            new_data = []
-            new_input = []
-
-            #print(hyp_ids[:beam_size])
-
-            for flat_id, hyp_id, token_id in zip(flat_ids, hyp_ids, token_ids_):
-                if len(new_hypotheses) == beam_size:
-                    break
-
-                hypothesis = hypotheses[hyp_id] + [token_id]
-                score = scores_[flat_id]
-
-                if token_id == utils.EOS_ID:
-                    # hypothesis is finished, it is thus unnecessary to keep expanding it
-                    finished_hypotheses.append(hypothesis)
-                    finished_scores.append(score)
-
-                    # early stop: number of possible hypotheses is reduced by one
-                    if early_stopping:
-                        beam_size -= 1
-                else:
-                    new_hypotheses.append(hypothesis)
-                    new_data.append(beam_data[hyp_id])
-
-                    new_scores.append(score)
-                    new_input.append(token_id)
-
-            hypotheses = new_hypotheses
-            beam_data = np.array(new_data)
-            scores = np.array(new_scores)
-            targets = np.array(new_input, dtype=np.int32)
-
-            if beam_size <= 0 or len(hypotheses) == 0:
-                break
-
-        hypotheses += finished_hypotheses
-        scores = np.concatenate([scores, finished_scores])
-
-        if self.len_normalization > 0:  # normalize score by length (to encourage longer sentences)
-            scores /= [len(hypothesis) ** self.len_normalization for hypothesis in hypotheses]
-
-        # sort best-list by score
-        sorted_idx = np.argsort(scores)
-        hypotheses = np.array(hypotheses)[sorted_idx].tolist()
-        scores = scores[sorted_idx].tolist()
-
-        return hypotheses, scores
-
-    def get_batch(self, data, binary=None, decoding=False):
+    def get_batch(self, data, decoding=False):
         """
         :param data:
         :param decoding: set this parameter to True to output dummy

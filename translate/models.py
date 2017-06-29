@@ -530,10 +530,12 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
                     rnn_input = tf.concat([rnn_input, context], axis=1)
 
                 next_state = lambda: get_next_state(rnn_input, state)
-                if decoder.state_zero:
+                if decoder.state_zero:  # s_1 = next(s_0)
                     state_zero = next_state
-                else:
-                    state_zero = state
+                else:   # s_1 = s_0
+                    cell_size = get_cell().output_size
+                    state_zero = lambda: (state[:,-cell_size:], state)  # LSTM's state contains its output
+
                 rnn_output, state = tf.cond(tf.equal(time, 0), state_zero, next_state)
 
             attn_input = state

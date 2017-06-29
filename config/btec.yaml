@@ -1,3 +1,6 @@
+label: 'BTEC'
+description: "baseline BTEC config"
+
 dropout_rate: 0.5
 cell_size: 256
 attn_size: 256
@@ -9,7 +12,7 @@ use_lstm: False
 weight_scale: 0.1
 
 data_dir: data/btec
-model_dir: models/btec_xent
+model_dir: models/btec
 batch_size: 32
 dev_prefix: dev
 

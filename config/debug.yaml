@@ -27,11 +27,12 @@ decay_after_n_epoch: 21
 
 steps_per_checkpoint: 200
 steps_per_eval: 200
-score_function: corpus_scores
 
 max_gradient_norm: 1.0
+max_epochs: 0
 batch_mode: 'standard'
 read_ahead: 10
+
 max_len: 25
 
 encoders:
@@ -39,6 +40,3 @@ encoders:
 
 decoders:
   - name: en
-    maxout: True
-    vanilla: True
-    attn_prev_word: True
