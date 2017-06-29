@@ -36,9 +36,7 @@ parser.add_argument('--no-gpu', action='store_true', help='run on CPU')
 # Decoding options (to avoid having to edit the config file)
 parser.add_argument('--beam-size', type=int)
 parser.add_argument('--ensemble', action='store_const', const=True)
-parser.add_argument('--lm-file')
 parser.add_argument('--load', nargs='+')
-parser.add_argument('--lm-weight', type=float)
 parser.add_argument('--output')
 parser.add_argument('--max-steps', type=int)
 parser.add_argument('--remove-unk', action='store_const', const=True)
@@ -160,7 +158,6 @@ def main(args=None):
                 initializer = tf.random_normal_initializer(stddev=config.weight_scale)
         else:
             initializer = None
-
 
         tf.get_variable_scope().set_initializer(initializer)
 

@@ -57,7 +57,6 @@ class Seq2SeqModel(object):
         (self.xent_loss, self.outputs, self.encoder_state, self.attention_states, self.attention_weights,
          self.beam_tensors) = tensors
 
-        #self.beam_outputs = [models.softmax(outputs_[:, 0, :]) for outputs_ in self.outputs]
         self.beam_output = models.softmax(self.outputs[0][:, 0, :])
 
         optimizers = self.get_optimizers(optimizer, learning_rate)
@@ -119,11 +118,6 @@ class Seq2SeqModel(object):
             output_feed['weights'] = self.attention_weights
 
         res = session.run(output_feed, input_feed)
-
-        if np.isnan(res['loss']):
-            import ipdb; ipdb.set_trace()
-            pass
-
         return namedtuple('output', 'loss weights')(res['loss'], res.get('weights'))
 
     def greedy_decoding(self, session, token_ids):

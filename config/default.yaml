@@ -48,8 +48,6 @@ use_lstm: False          # use LSTM units instead of GRU units
 character_level: False   # input sequence is at the character level
 weight_scale: null       # if not null, initialize all weights to a normal distribution with this stdev
 initializer: null        # normal or uniform initializer
-layer_norm: False        # apply layer norm to the LSTMs
-lstm_dropout: False      # apply dropout to the LSTMs
 tie_embeddings: False    # use same parameters for output projection and output embeddings
 
 maxout: True             # parameters of the decoder

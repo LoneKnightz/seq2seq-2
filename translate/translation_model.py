@@ -219,7 +219,7 @@ class TranslationModel:
         try:
             output_file = sys.stdout if output is None else open(output, 'w')
             paths = self.filenames.test or [None]
-            lines = utils.read_lines(paths)
+            lines = utils.read_lines(paths, binary=self.binary)
 
             if not self.filenames.test:   # interactive mode
                 batch_size = 1
@@ -524,39 +524,19 @@ class TranslationModel:
         save_checkpoint(sess, self.saver, self.checkpoint_dir, self.global_step)
 
 
-# variable_mapping = [   # for backward compatibility with old models
-#     (r'encoder_(.*?)/forward_1/initial_state', r'encoder_\1/initial_state_fw'),
-#     (r'encoder_(.*?)/backward_1/initial_state', r'encoder_\1/initial_state_bw'),
-#     (r'encoder_(.*?)/forward_1/basic_lstm_cell', r'encoder_\1/stack_bidirectional_rnn/cell_0/bidirectional_rnn/fw/layer_norm_basic_lstm_cell'),
-#     (r'encoder_(.*?)/backward_1/basic_lstm_cell', r'encoder_\1/stack_bidirectional_rnn/cell_0/bidirectional_rnn/bw/layer_norm_basic_lstm_cell'),
-#     (r'decoder_(.*?)/basic_lstm_cell', r'decoder_\1/layer_norm_basic_lstm_cell'),
-#     (r'map_attns/Matrix', r'map_attns/matrix'),
-#     (r'Matrix', r'kernel'),
-#     (r'Bias', r'bias'),
-# ]
 variable_mapping = [   # for backward compatibility with old models
     (r'seq2seq/', r''),
-    (r'multi_encoder/(.*?)/MultiBiRNN_FW_(.*?)/BasicLSTMCell/Linear',
-     r'encoder_\1/stack_bidirectional_rnn/cell_\2/bidirectional_rnn/fw/layer_norm_basic_lstm_cell'),
-    (r'decoder_(.*?)/MultiRNNCell/Cell(.*?)/BasicLSTMCell/Linear',
-     r'decoder_\1/multi_rnn_cell/cell_\2/layer_norm_basic_lstm_cell'),
-    (r'multi_encoder/(.*?)/input_layer_(.*?)/',
-     r'encoder_\1/layer_\2/'),
-    (r'attention/filter_(.*?)', r'attention/filter'),
-    (r'attention/U_(.*?)', r'attention/U'),
-    (r'attention/W_(.*?)', r'attention/W'),
-    (r'attention/V_(.*?)', r'attention/V'),
-    (r'attention/Linear', r'attention/y'),
-    # (r'encoder_(.*?)/forward_1/initial_state', r'encoder_\1/initial_state_fw'),
-    # (r'encoder_(.*?)/backward_1/initial_state', r'encoder_\1/initial_state_bw'),
-    # (r'encoder_(.*?)/forward_1/basic_lstm_cell', r'encoder_\1/stack_bidirectional_rnn/cell_0/bidirectional_rnn/fw/layer_norm_basic_lstm_cell'),
-    # (r'encoder_(.*?)/backward_1/basic_lstm_cell', r'encoder_\1/stack_bidirectional_rnn/cell_0/bidirectional_rnn/bw/layer_norm_basic_lstm_cell'),
-    # (r'decoder_(.*?)/basic_lstm_cell', r'decoder_\1/layer_norm_basic_lstm_cell'),
-    # (r'map_attns/Matrix', r'map_attns/matrix'),
+    (r'multi_encoder/(.*?)/MultiBiRNN_FW_(.*?)/BasicLSTMCell/Linear', r'encoder_\1/stack_bidirectional_rnn/cell_\2/bidirectional_rnn/fw/basic_lstm_cell'),
+    (r'multi_encoder/(.*?)/MultiBiRNN_BW_(.*?)/BasicLSTMCell/Linear', r'encoder_\1/stack_bidirectional_rnn/cell_\2/bidirectional_rnn/bw/basic_lstm_cell'),
+    (r'decoder_(.*?)/MultiRNNCell/Cell(.*?)/BasicLSTMCell/Linear', r'decoder_\1/multi_rnn_cell/cell_\2/basic_lstm_cell'),
+    (r'multi_encoder/(.*?)/input_layer_(.*?)/', r'encoder_\1/layer_\2/'),
+    (r'multi_encoder/(.*?)/bidir_projection/', r'encoder_\1/bidir_projection/'),
+    (r'attention/(.*)_([^:]*)', r'attention_\2/\1'),
+    (r'attention/Linear/', r'attention_feats41/y/'),
+    (r'attention_output_projection/Linear', r'softmax'),
     (r'Matrix', r'kernel'),
     (r'Bias', r'bias'),
 ]
-
 
 
 def load_checkpoint(sess, checkpoint_dir, filename=None, blacklist=()):
@@ -608,7 +588,7 @@ def load_checkpoint(sess, checkpoint_dir, filename=None, blacklist=()):
         tf.train.Saver(variables).restore(sess, filename)
 
         utils.debug('retrieved parameters ({})'.format(len(variables)))
-        for name, var in variables.items():
+        for name, var in sorted(variables.items(), key=lambda item: item[0]):
             utils.debug('  {} {}'.format(name, var.get_shape()))
 
 

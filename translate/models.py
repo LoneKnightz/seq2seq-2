@@ -1,7 +1,7 @@
 import tensorflow as tf
 import functools
 import math
-from tensorflow.contrib.rnn import BasicLSTMCell, DropoutWrapper, LayerNormBasicLSTMCell, RNNCell
+from tensorflow.contrib.rnn import BasicLSTMCell, DropoutWrapper, RNNCell
 from tensorflow.contrib.rnn import MultiRNNCell, LSTMStateTuple, GRUCell
 from translate.rnn import stack_bidirectional_dynamic_rnn
 from translate import utils
@@ -94,14 +94,11 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
 
             def get_cell(reuse=False):
                 if encoder.use_lstm:
-                    keep_prob = dropout if dropout and encoder.lstm_dropout else 1.0
-                    cell = LayerNormBasicLSTMCell(encoder.cell_size, dropout_keep_prob=keep_prob,
-                                                  layer_norm=encoder.layer_norm, reuse=reuse)
-                    cell = CellWrapper(cell)
+                    cell = CellWrapper(BasicLSTMCell(encoder.cell_size, reuse=reuse))
                 else:
                     cell = GRUCell(encoder.cell_size, reuse=reuse)
 
-                if dropout is not None and not (encoder.use_lstm and encoder.lstm_dropout):
+                if dropout is not None:
                     cell = DropoutWrapper(cell, input_keep_prob=dropout)
 
                 return cell
@@ -152,7 +149,6 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                     inputs.append(inputs_)
 
                 encoder_inputs_ = tf.concat(inputs, axis=2)
-                # if encoder.convolution_activation.lower() == 'relu':
                 encoder_inputs_ = tf.nn.relu(encoder_inputs_)
 
             if encoder.maxout_stride:
@@ -263,9 +259,11 @@ def compute_energy(hidden, state, attn_size, **kwargs):
 def compute_energy_with_filter(hidden, state, prev_weights, attention_filters, attention_filter_length,
                                **kwargs):
     # TODO: check this
+    hidden = tf.expand_dims(hidden, 2)
+
     batch_size = tf.shape(hidden)[0]
     time_steps = tf.shape(hidden)[1]
-    attn_size = hidden.get_shape()[2].value
+    attn_size = hidden.get_shape()[3].value
 
     filter_shape = [attention_filter_length * 2 + 1, 1, 1, attention_filters]
     filter_ = get_variable('filter', filter_shape)
@@ -293,7 +291,7 @@ def compute_energy_with_filter(hidden, state, prev_weights, attention_filters, a
 
 def global_attention(state, hidden_states, encoder, encoder_input_length, scope=None, context=None,
                      **kwargs):
-    with tf.variable_scope(scope or 'attention'):
+    with tf.variable_scope(scope or 'attention_{}'.format(encoder.name)):
         if context is not None and encoder.use_context:  # FIXME
             state = tf.concat([state, context], axis=1)
 
@@ -304,14 +302,13 @@ def global_attention(state, hidden_states, encoder, encoder_input_length, scope=
         else:
             e = compute_energy(hidden_states, state, attn_size=encoder.attn_size, **kwargs)
 
-        #e -= tf.reduce_max(e, axis=1, keep_dims=True)  # FIXME
-        #mask = tf.sequence_mask(tf.cast(encoder_input_length, tf.int32), tf.shape(hidden_states)[1],
-        #                        dtype=tf.float32)
-        #exp = tf.exp(e) * mask
-        #weights = exp / tf.reduce_sum(exp, axis=-1, keep_dims=True)
-        #weighted_average = tf.reduce_sum(tf.expand_dims(weights, 2) * hidden_states, axis=1)
+        # weights = tf.nn.softmax(e)   # FIXME
 
-        weights = tf.nn.softmax(e)
+        e -= tf.reduce_max(e, axis=1, keep_dims=True)
+        mask = tf.sequence_mask(tf.cast(encoder_input_length, tf.int32), tf.shape(hidden_states)[1],
+                               dtype=tf.float32)
+        exp = tf.exp(e) * mask
+        weights = exp / tf.reduce_sum(exp, axis=-1, keep_dims=True)
         weighted_average = tf.reduce_sum(tf.expand_dims(weights, 2) * hidden_states, axis=1)
 
         return weighted_average, weights
@@ -341,7 +338,7 @@ def last_state_attention(hidden_states, encoder_input_length, *args, **kwargs):
     return weighted_average, weights
 
 
-def local_attention(state, hidden_states, encoder, encoder_input_length, pos=None, scope=None,
+def local_attention(state, hidden_states, encoder, encoder_input_length, scope=None,
                     context=None, **kwargs):
     batch_size = tf.shape(state)[0]
     attn_length = tf.shape(hidden_states)[1]
@@ -351,7 +348,7 @@ def local_attention(state, hidden_states, encoder, encoder_input_length, pos=Non
 
     state_size = state.get_shape()[1].value
 
-    with tf.variable_scope(scope or 'attention'):
+    with tf.variable_scope(scope or 'attention_{}'.format(encoder.name)):
         encoder_input_length = tf.to_float(tf.expand_dims(encoder_input_length, axis=1))
 
         # Local attention of Luong et al. (http://arxiv.org/abs/1508.04025)
@@ -405,17 +402,16 @@ def attention(encoder, **kwargs):
     return attention_function(encoder=encoder, **kwargs)
 
 
-def multi_attention(state, hidden_states, encoders, encoder_input_length, pos=None, aggregation_method='sum',
+def multi_attention(state, hidden_states, encoders, encoder_input_length, aggregation_method='sum',
                     prev_weights=None, **kwargs):
     attns = []
     weights = []
 
     context_vector = None
     for i, (hidden, encoder, input_length) in enumerate(zip(hidden_states, encoders, encoder_input_length)):
-        pos_ = pos[i] if pos is not None else None
         prev_weights_ = prev_weights[i] if prev_weights is not None else None
         context_vector, weights_ = attention(state=state, hidden_states=hidden, encoder=encoder,
-                                             encoder_input_length=input_length, pos=pos_, context=context_vector,
+                                             encoder_input_length=input_length, context=context_vector,
                                              prev_weights=prev_weights_, **kwargs)
         attns.append(context_vector)
         weights.append(weights_)
@@ -462,14 +458,11 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
 
         for _ in range(decoder.layers):
             if decoder.use_lstm:
-                keep_prob = dropout if dropout and decoder.lstm_dropout else 1.0
-                cell = LayerNormBasicLSTMCell(decoder.cell_size, dropout_keep_prob=keep_prob,
-                                              layer_norm=decoder.layer_norm, reuse=reuse)
-                cell = CellWrapper(cell)
+                cell = CellWrapper(BasicLSTMCell(decoder.cell_size, reuse=reuse))
             else:
                 cell = GRUCell(decoder.cell_size, reuse=reuse)
 
-            if dropout is not None and not (decoder.use_lstm and decoder.lstm_dropout):
+            if dropout is not None:
                 cell = DropoutWrapper(cell, input_keep_prob=dropout)
 
             cells.append(cell)
