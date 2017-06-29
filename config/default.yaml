@@ -73,7 +73,7 @@ vocab_prefix: vocab      # name of the vocabulary files
 load: []                 # list of checkpoints to load (in this specific order) after main checkpoint
 
 # decoding
-score_function: corpus_scores # name of the main scoring function (used for selecting models)
+score_function: corpus_bleu # name of the main scoring function (used for selecting models)
 remove_unk: False        # remove UNK symbols from the decoder output
 beam_size: 1             # beam size for decoding (decoder is greedy by default)
 ensemble: False          # use an ensemble of models while decoding (specified by the --checkpoints parameter)
