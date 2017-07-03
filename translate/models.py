@@ -121,6 +121,8 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                 for j, layer_size in enumerate(encoder.input_layers):
                     encoder_inputs_ = dense(encoder_inputs_, layer_size, activation=tf.tanh, use_bias=True,
                                             name='layer_{}'.format(j))
+                    if dropout:
+                        encoder_inputs_ = tf.nn.dropout(encoder_inputs_, dropout)
 
             if encoder.convolutions:
                 if encoder.binary:
@@ -302,13 +304,13 @@ def global_attention(state, hidden_states, encoder, encoder_input_length, scope=
         else:
             e = compute_energy(hidden_states, state, attn_size=encoder.attn_size, **kwargs)
 
-        # weights = tf.nn.softmax(e)   # FIXME
+        weights = tf.nn.softmax(e)   # FIXME
 
-        e -= tf.reduce_max(e, axis=1, keep_dims=True)
-        mask = tf.sequence_mask(tf.cast(encoder_input_length, tf.int32), tf.shape(hidden_states)[1],
-                               dtype=tf.float32)
-        exp = tf.exp(e) * mask
-        weights = exp / tf.reduce_sum(exp, axis=-1, keep_dims=True)
+        # e -= tf.reduce_max(e, axis=1, keep_dims=True)
+        # mask = tf.sequence_mask(tf.cast(encoder_input_length, tf.int32), tf.shape(hidden_states)[1],
+        #                        dtype=tf.float32)
+        # exp = tf.exp(e) * mask
+        # weights = exp / tf.reduce_sum(exp, axis=-1, keep_dims=True)
         weighted_average = tf.reduce_sum(tf.expand_dims(weights, 2) * hidden_states, axis=1)
 
         return weighted_average, weights

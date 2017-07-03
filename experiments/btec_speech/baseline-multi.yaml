@@ -21,7 +21,7 @@ dev_prefix: dev.Agnes       # different speaker
 optimizer: 'adam'
 learning_rate: 0.001
 
-steps_per_checkpoint: 1000
+steps_per_checkpoint: 500
 steps_per_eval: 1000
 
 max_gradient_norm: 5.0
