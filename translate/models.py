@@ -161,13 +161,6 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                 k = tf.to_int32(tf.ceil(time_steps / stride) * stride) - time_steps   # TODO: simpler
                 pad = tf.zeros([batch_size, k, tf.shape(encoder_inputs_)[2]])
                 encoder_inputs_ = tf.concat([encoder_inputs_, pad], axis=1)
-
-                # encoder_inputs_ = tf.transpose(encoder_inputs_, [0, 2, 1])
-                # time_steps_ = tf.shape(encoder_inputs_)[2]
-                # shape = tf.stack([batch_size, encoder_inputs_.get_shape()[1], time_steps_ // stride, stride])
-                # encoder_inputs_ = tf.reshape(encoder_inputs_, shape=shape)
-                # encoder_inputs_ = tf.reduce_max(encoder_inputs_, axis=3)
-                # encoder_inputs_ = tf.transpose(encoder_inputs_, [0, 2, 1])
                 encoder_inputs_ = tf.nn.pool(encoder_inputs_, window_shape=[stride], pooling_type='MAX',
                                              padding='VALID', strides=[stride])
                 encoder_input_length_ = tf.to_int32(tf.ceil(encoder_input_length_ / stride))
