@@ -161,13 +161,6 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                 k = tf.to_int32(tf.ceil(time_steps / stride) * stride) - time_steps   # TODO: simpler
                 pad = tf.zeros([batch_size, k, tf.shape(encoder_inputs_)[2]])
                 encoder_inputs_ = tf.concat([encoder_inputs_, pad], axis=1)
-
-                # encoder_inputs_ = tf.transpose(encoder_inputs_, [0, 2, 1])
-                # time_steps_ = tf.shape(encoder_inputs_)[2]
-                # shape = tf.stack([batch_size, encoder_inputs_.get_shape()[1], time_steps_ // stride, stride])
-                # encoder_inputs_ = tf.reshape(encoder_inputs_, shape=shape)
-                # encoder_inputs_ = tf.reduce_max(encoder_inputs_, axis=3)
-                # encoder_inputs_ = tf.transpose(encoder_inputs_, [0, 2, 1])
                 encoder_inputs_ = tf.nn.pool(encoder_inputs_, window_shape=[stride], pooling_type='MAX',
                                              padding='VALID', strides=[stride])
                 encoder_input_length_ = tf.to_int32(tf.ceil(encoder_input_length_ / stride))
@@ -304,11 +297,11 @@ def global_attention(state, hidden_states, encoder, encoder_input_length, scope=
         else:
             e = compute_energy(hidden_states, state, attn_size=encoder.attn_size, **kwargs)
 
-        # weights = tf.nn.softmax(e)
+        #weights = tf.nn.softmax(e)   # FIXME
 
         e -= tf.reduce_max(e, axis=1, keep_dims=True)
         mask = tf.sequence_mask(tf.cast(encoder_input_length, tf.int32), tf.shape(hidden_states)[1],
-                               dtype=tf.float32)
+                                dtype=tf.float32)
         exp = tf.exp(e) * mask
         weights = exp / tf.reduce_sum(exp, axis=-1, keep_dims=True)
         weighted_average = tf.reduce_sum(tf.expand_dims(weights, 2) * hidden_states, axis=1)
