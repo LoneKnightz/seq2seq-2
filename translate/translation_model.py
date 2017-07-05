@@ -338,10 +338,12 @@ class TranslationModel:
         while True:
             try:
                 self.train_step(sess=sess, **kwargs)
-            except utils.CheckpointException:
+            except utils.EvalException:
                 self.save(sess)
                 step, score = self.training.scores[-1]
                 self.manage_best_checkpoints(step, score)
+            except utils.CheckpointException:
+                self.save(sess)
 
     def init_training(self, sess, sgd_after_n_epoch=None, **kwargs):
         self.read_data(**kwargs)
@@ -439,6 +441,8 @@ class TranslationModel:
             raise utils.FinishedTrainingException
         if 0 < max_steps <= global_step or 0 < max_epochs <= epoch:
             raise utils.FinishedTrainingException
+        elif steps_per_eval and global_step % steps_per_eval == 0:
+            raise utils.EvalException
         elif steps_per_checkpoint and global_step % steps_per_checkpoint == 0:
             raise utils.CheckpointException
 

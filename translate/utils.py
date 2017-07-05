@@ -54,6 +54,8 @@ class FinishedTrainingException(Exception):
 
 class CheckpointException(Exception):
     pass
+class EvalException(Exception):
+    pass
 
 
 @contextmanager
