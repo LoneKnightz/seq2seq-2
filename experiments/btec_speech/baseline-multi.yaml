@@ -25,7 +25,7 @@ steps_per_checkpoint: 1000
 steps_per_eval: 1000
 
 max_gradient_norm: 5.0
-max_steps: 20000
+max_steps: 30000
 batch_mode: 'standard'
 read_ahead: 10
 

@@ -174,7 +174,7 @@ class TranslationModel:
 
     def align(self, sess, output=None, align_encoder_id=0, **kwargs):
         if self.binary and any(self.binary):
-            raise NotImplementedError  # FIXME
+            raise NotImplementedError
 
         if len(self.filenames.test) != len(self.extensions):
             raise Exception('wrong number of input files')
@@ -189,7 +189,7 @@ class TranslationModel:
             _, weights = self.seq2seq_model.step(sess, data=[token_ids], forward_only=True, align=True,
                                                  update_model=False)
 
-            trg_vocab = self.trg_vocab[0]      # FIXME
+            trg_vocab = self.trg_vocab[0]
             trg_token_ids = token_ids[len(self.src_ext)]
             trg_tokens = [trg_vocab.reverse[i] if i < len(trg_vocab.reverse) else utils._UNK for i in trg_token_ids]
 
@@ -207,11 +207,10 @@ class TranslationModel:
 
     def decode(self, sess, beam_size, output=None, remove_unk=False, early_stopping=True, raw_output=False, **kwargs):
         utils.log('starting decoding')
-
         # empty `test` means that we read from standard input, which is not possible with multiple encoders
-        # assert len(self.src_ext) == 1 or self.filenames.test
+        assert len(self.src_ext) == 1 or self.filenames.test
         # check that there is the right number of files for decoding
-        # assert not self.filenames.test or len(self.filenames.test) == len(self.src_ext)
+        assert not self.filenames.test or len(self.filenames.test) == len(self.src_ext)
 
         output_file = None
         try:
@@ -239,7 +238,7 @@ class TranslationModel:
                 output_file.close()
 
     def evaluate(self, sess, beam_size, score_function, on_dev=True, output=None, remove_unk=False, max_dev_size=None,
-                 script_dir='scripts', early_stopping=True, raw_output=False, **kwargs):
+                 early_stopping=True, raw_output=False, **kwargs):
         """
         :param score_function: name of the scoring function used to score and rank models
           (typically 'bleu_score')
@@ -315,7 +314,7 @@ class TranslationModel:
                     output_file.close()
 
             # default scoring function is utils.bleu_score
-            score, score_summary = getattr(evaluation, score_function)(hypotheses, references, script_dir=script_dir)
+            score, score_summary = getattr(evaluation, score_function)(hypotheses, references)
 
             # print scoring information
             score_info = [prefix, 'score={:.2f}'.format(score)]

@@ -15,26 +15,6 @@ from collections import namedtuple
 from contextlib import contextmanager
 
 # special vocabulary symbols
-
-# _BOS = '<S>'
-# _EOS = '</S>'
-# _UNK = '<UNK>'
-# _KEEP = '<KEEP>'
-# _DEL = '<DEL>'
-# _INS = '<INS>'
-# _SUB = '<SUB>'
-# _NONE = '<NONE>'
-#
-# _START_VOCAB = [_BOS, _EOS, _UNK, _KEEP, _DEL, _INS, _SUB, _NONE]
-#
-# BOS_ID = 0
-# EOS_ID = 1
-# UNK_ID = 2
-# KEEP_ID = 3
-# DEL_ID = 4
-# INS_ID = 5
-# SUB_ID = 6
-# NONE_ID = 7
 _PAD = '_PAD'
 _BOS = '_GO'
 _EOS = '_EOS'

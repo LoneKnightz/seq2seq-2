@@ -61,13 +61,13 @@ state_zero: False        # if False s_1 = s_0, otherwise s_1 = next(s_0) (not su
 use_lstm_state: True     # use the entire LSTM state instead of its output to predict next word
 output_extra_proj: True  # do an intermediate output projection to embedding size (necessary for tie_embeddings)
 bidir_projection: False  # do a projection on the bidir encoder states, to obtain the same dim as an unidir encoder
-concat_last_states: False # initial state of the decoder is a concatenation of all layers' last states
+concat_last_states: False  # initial state of the decoder is a concatenation of all layers' last states
+trainable_initial_states: True  # whether the initial states of the encoder are trainable parameters or not
 
 # data
 data_dir: data           # directory containing the training data
 model_dir: model         # directory where the model will be saved (checkpoints and eval outputs)
 train_prefix: train      # name of the training corpus
-script_dir: scripts      # directory where the scripts are kepts (in particular the scoring scripts)
 dev_prefix: [dev]        # names of the development corpora
 vocab_prefix: vocab      # name of the vocabulary files
 load: []                 # list of checkpoints to load (in this specific order) after main checkpoint

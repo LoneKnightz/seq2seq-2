@@ -35,16 +35,12 @@ This example will create 6 files in `output/`: train.fr, train.en, test.fr,\
  `data/news-dev`. These three output corpora will be shuffled.
 """
 
-_BOS = '<S>'
-_EOS = '</S>'
-_UNK = '<UNK>'
-_KEEP = '<KEEP>'
-_DEL = '<DEL>'
-_INS = '<INS>'
-_SUB = '<SUB>'
-_NONE = '<NONE>'
+_PAD = '_PAD'
+_BOS = '_GO'
+_EOS = '_EOS'
+_UNK = '_UNK'
 
-_START_VOCAB = [_BOS, _EOS, _UNK, _KEEP, _DEL, _INS, _SUB, _NONE]
+_START_VOCAB = [_PAD, _BOS, _EOS, _UNK]
 
 temporary_files = []
 
