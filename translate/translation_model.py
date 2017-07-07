@@ -584,8 +584,8 @@ def load_checkpoint(sess, checkpoint_dir, filename=None, blacklist=()):
         tf.train.Saver(variables).restore(sess, filename)
 
         utils.debug('retrieved parameters ({})'.format(len(variables)))
-        for name, var in sorted(variables.items(), key=lambda item: item[0]):
-            utils.debug('  {} {}'.format(name, var.get_shape()))
+        for var in sorted(variables.values(), key=lambda var: var.name):
+            utils.debug('  {} {}'.format(var.name, var.get_shape()))
 
 
 def save_checkpoint(sess, saver, checkpoint_dir, step=None, name=None):
