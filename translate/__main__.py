@@ -114,6 +114,8 @@ def main(args=None):
     except:
         pass
 
+    utils.log('tensorflow version: {}'.format(tf.__version__))
+
     # log parameters
     utils.debug('program arguments')
     for k, v in sorted(config.items(), key=itemgetter(0)):

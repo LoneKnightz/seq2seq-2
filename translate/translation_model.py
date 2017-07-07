@@ -90,7 +90,7 @@ class TranslationModel:
                                character_level=self.character_level, binary=self.binary)[0]
             for dev in self.filenames.dev
         ]
-        # subset of the dev set whose perplexity is periodically evaluated
+        # subset of the dev set whose loss is periodically evaluated
         self.dev_batches = [utils.get_batches(dev_set, batch_size=self.batch_size) for dev_set in dev_sets]
 
     def read_vocab(self):
@@ -102,17 +102,14 @@ class TranslationModel:
         self.src_vocab, self.trg_vocab = self.vocabs[:len(self.src_ext)], self.vocabs[len(self.src_ext):]
 
     def eval_step(self, sess):
-        # compute perplexity on dev set
+        # compute loss on dev set
         for prefix, dev_batches in zip(self.dev_prefix, self.dev_batches):
             eval_loss = sum(
                 self.seq2seq_model.step(sess, batch, update_model=False).loss * len(batch)
                 for batch in dev_batches
             )
             eval_loss /= sum(map(len, dev_batches))
-            perplexity = math.exp(eval_loss) if eval_loss < 300 else float('inf')
-
-            utils.log("  {} eval: perplexity {:.2f}".format(prefix, perplexity))
-
+            utils.log("  {} eval: loss {:.2f}".format(prefix, eval_loss))
 
     def decode_sentence(self, sess, sentence_tuple, beam_size=1, remove_unk=False, early_stopping=True):
         return next(self.decode_batch(sess, [sentence_tuple], beam_size, remove_unk, early_stopping))
@@ -401,10 +398,8 @@ class TranslationModel:
             loss = self.training.loss / self.training.steps
             step_time = self.training.time / self.training.steps
 
-            perplexity = math.exp(loss) if loss < 300 else float('inf')
-
-            summary = 'step {} epoch {} learning rate {:.4f} step-time {:.4f} perplexity {:.4f}'.format(
-                global_step, epoch + 1, self.learning_rate.eval(), step_time, perplexity)
+            summary = 'step {} epoch {} learning rate {:.4f} step-time {:.4f} loss {:.4f}'.format(
+                global_step, epoch + 1, self.learning_rate.eval(), step_time, loss)
             if self.name is not None:
                 summary = '{} {}'.format(self.name, summary)
             utils.log(summary)
