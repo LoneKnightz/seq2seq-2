@@ -10,6 +10,7 @@ import wave
 import shutil
 import collections
 import functools
+import operator
 
 from collections import namedtuple
 from contextlib import contextmanager
@@ -169,27 +170,22 @@ def get_filenames(data_dir, model_dir, extensions, train_prefix, dev_prefix, voc
 
 
 def read_dataset(paths, extensions, vocabs, max_size=None, character_level=None, sort_by_length=False,
-                 max_seq_len=None, from_position=None, binary=None):
-    if from_position is not None:
-        raise NotImplementedError  # FIXME
-
+                 max_seq_len=None, from_position=None, binary=None, log_=False):
     data_set = []
 
     if from_position is not None:
         debug('reading from position: {}'.format(from_position))
 
-    # line_reader = read_lines_from_position(paths, from_position=from_position, binary=binary)
-    line_reader = read_lines(paths, binary=binary)
+    line_reader = read_lines_from_position(paths, from_position=from_position, binary=binary)
+    # line_reader = read_lines(paths, binary=binary)
     character_level = character_level or {}
 
     positions = None
 
-    #for inputs, positions in line_reader:
-    for inputs in line_reader:
+    for inputs, positions in line_reader:
+    # for inputs in line_reader:
         if len(data_set) > 0 and len(data_set) % 100000 == 0:
             log("  lines read {}".format(len(data_set)))
-        if max_size and len(data_set) >= max_size:
-            break
 
         lines = [
             input_ if binary_ else
@@ -197,13 +193,21 @@ def read_dataset(paths, extensions, vocabs, max_size=None, character_level=None,
             for input_, vocab, binary_, ext in zip(inputs, vocabs, binary, extensions)
         ]
 
+        if log_:
+            with open('test.txt', 'a') as f:
+                f.write(inputs[1])
+
         if not all(lines):  # skip empty inputs
             continue
+
         # skip lines that are too long
         if max_seq_len and any(len(line) > max_seq_len[ext] for line, ext in zip(lines, extensions)):
             continue
 
         data_set.append(lines)
+
+        if max_size and len(data_set) >= max_size:
+            break
 
     debug('files: {}'.format(' '.join(paths)))
     debug('size: {}'.format(len(data_set)))
@@ -226,6 +230,19 @@ def random_batch_iterator(data, batch_size):
         yield random.sample(data, batch_size)
 
 
+def basic_batch_iterator(data, batch_size, shuffle=False, allow_smaller=True):
+    if shuffle:
+        random.shuffle(data)
+
+    batch_count = len(data) // batch_size
+
+    if allow_smaller and batch_count * batch_size < len(data):
+        batch_count += 1
+
+    for i in range(batch_count):
+        yield data[i * batch_size:(i + 1) * batch_size]
+
+
 def cycling_batch_iterator(data, batch_size, shuffle=True, allow_smaller=True):
     """
     Indefinitely cycle through a dataset and yield batches (the dataset is shuffled
@@ -236,20 +253,13 @@ def cycling_batch_iterator(data, batch_size, shuffle=True, allow_smaller=True):
     :return: an iterator which yields batches (indefinitely)
     """
     while True:
-        if shuffle:
-            random.shuffle(data)
-
-        batch_count = len(data) // batch_size
-
-        if allow_smaller and batch_count * batch_size < len(data):
-            batch_count += 1
-
-        for i in range(batch_count):
-            yield data[i * batch_size:(i + 1) * batch_size]
+        iterator = basic_batch_iterator(data, batch_size, shuffle=shuffle, allow_smaller=allow_smaller)
+        for batch in iterator:
+            yield batch
 
 
 def read_ahead_batch_iterator(data, batch_size, read_ahead=10, shuffle=True, allow_smaller=True,
-                              mode='standard', **kwargs):
+                              mode='standard', cycle=True, **kwargs):
     """
     Same iterator as `cycling_batch_iterator`, except that it reads a number of batches
     at once, and sorts their content according to their size.
@@ -263,19 +273,30 @@ def read_ahead_batch_iterator(data, batch_size, read_ahead=10, shuffle=True, all
       mean faster training, but less random behavior)
     :return: an iterator which yields batches (indefinitely)
     """
-    if mode == 'random':
+    if not cycle:
+        iterator = basic_batch_iterator(data, batch_size, shuffle=shuffle, allow_smaller=allow_smaller)
+    elif mode == 'random':
         iterator = random_batch_iterator(data, batch_size)
     else:
         iterator = cycling_batch_iterator(data, batch_size, shuffle=shuffle, allow_smaller=allow_smaller)
 
-    if read_ahead <= 1:
-        while True:
-            yield next(iterator)
+    if read_ahead is None or read_ahead <= 1:
+        return iterator
 
     while True:
-        batches = [next(iterator) for _ in range(read_ahead)]
+        batches = []
+        for batch in iterator:
+            batches.append(batch)
+            if len(batches) >= read_ahead:
+                break
+
         data_ = sorted(sum(batches, []), key=lambda lines: len(lines[-1]))
         batches = [data_[i * batch_size:(i + 1) * batch_size] for i in range(read_ahead)]
+        batches = [batch for batch in batches if batch]  # filter empty batches
+
+        if not any(batches):
+            break
+
         if shuffle:
             random.shuffle(batches)
         for batch in batches:
@@ -283,13 +304,13 @@ def read_ahead_batch_iterator(data, batch_size, read_ahead=10, shuffle=True, all
 
 
 def get_batch_iterator(paths, extensions, vocabs, batch_size, max_size=None, character_level=None,
-                       sort_by_length=False, max_seq_len=None, read_ahead=10, mode='standard', shuffle=True,
-                       binary=None):
+                       sort_by_length=False, max_seq_len=None, read_ahead=10, shuffle=True,
+                       binary=None, mode='standard'):
     read_shard = functools.partial(read_dataset,
         paths=paths, extensions=extensions, vocabs=vocabs, max_size=max_size, max_seq_len=max_seq_len,
-        character_level=character_level, sort_by_length=sort_by_length, binary=binary)
-    batch_iterator = functools.partial(read_ahead_batch_iterator,
-        batch_size=batch_size, read_ahead=read_ahead, mode=mode, shuffle=shuffle)
+        character_level=character_level, sort_by_length=sort_by_length, binary=binary, log_=True)
+    batch_iterator = functools.partial(read_ahead_batch_iterator, batch_size=batch_size, read_ahead=read_ahead,
+                                       shuffle=shuffle, mode=mode)
 
     shard, position = read_shard()
 
@@ -297,6 +318,8 @@ def get_batch_iterator(paths, extensions, vocabs, batch_size, max_size=None, cha
         # training set is small enough to fit entirely into memory (single shard)
         return batch_iterator(shard), len(shard)
     else:
+        batch_iterator = functools.partial(batch_iterator, cycle=False)
+
         def generator(position, shard):
             while True:
                 if len(shard) < max_size:
@@ -372,48 +395,40 @@ def read_binary_features(filename, from_position=None):
             if len(x) < 4 * n:
                 break
             feats = struct.unpack('f' * n, x)
-            #yield list(np.array(feats).reshape(frames, dim)), f.tell()
-            yield list(np.array(feats).reshape(frames, dim))
+            yield list(np.array(feats).reshape(frames, dim)), f.tell()
 
 
 def read_lines(paths, binary=None):
     binary = binary or [False] * len(paths)
     return zip(*[sys.stdin if path is None else
-                 read_binary_features(path) if binary_ else open(path)
+                 map(operator.itemgetter(0), read_binary_features(path)) if binary_
+                 else open(path)
                  for path, binary_ in zip(paths, binary)])
 
 
-def read_lines_from_position(paths, from_position=None, binary=None):
-    if binary is not None and any(binary):
-       raise NotImplementedError  # TODO
-
-    # def read_text(path, from_position=None):
-    #     with open(path) as f:
-    #         if from_position is not None:
-    #             f.seek(from_position)
-    #         while True:
-    #             line = f.readline()
-    #             if not line:
-    #                 break
-    #             yield line, f.tell()
-    #
-    # iterators = [
-    #     read_binary_features(path, from_position_) if binary_ else
-    #     read_text(path, from_position_)
-    #     for path, binary_, from_position_ in zip(paths, binary, from_position)
-    # ]
-
-    with open_files(paths) as files:
-        if from_position:
-            for path, file_, position in zip(paths, files, from_position):
-                if path is not None:
-                    file_.seek(position)
+def read_text_from_position(filename, from_position=None):
+    with open(filename) as f:
+        if from_position is not None:
+            f.seek(from_position)
         while True:
-            lines = [file_.readline() for file_ in files]
-            if not all(lines):
+            line = f.readline()
+            if not line:
                 break
-            position = [file_.tell() for file_ in files]
-            yield lines, position
+            yield line, f.tell()
+
+
+def read_lines_from_position(paths, from_position=None, binary=None):
+    binary = binary or [False] * len(paths)
+    from_position = from_position or [None] * len(paths)
+
+    iterators = [
+        read_binary_features(path, from_position_) if binary_ else
+        read_text_from_position(path, from_position_)
+        for path, binary_, from_position_ in zip(paths, binary, from_position)
+    ]
+
+    for data in zip(*iterators):
+        yield tuple(zip(*data))
 
 
 def create_logger(log_file=None):

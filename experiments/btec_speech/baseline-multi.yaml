@@ -17,6 +17,7 @@ batch_size: 64
 
 train_prefix: train.concat  # Michel, Philippe, Loic, Marion, Helene, Fabienne
 dev_prefix: dev.Agnes       # different speaker
+#max_train_size: 20000      # TODO: shuffle entire training set before training
 
 optimizer: 'adam'
 learning_rate: 0.001

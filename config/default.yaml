@@ -17,14 +17,14 @@ sgd_after_n_epoch: null        # use SGD optimizer after this many epochs (inste
 min_learning_rate: 0.000001    # stop training when learning rate is smaller than this
 
 # batch iteration parameters
-batch_mode: 'standard'   # standard, random, or strict
+batch_mode: 'standard'   # standard (cycle through entire training set) or random (sample randomly from training set)
 shuffle: True            # shuffle dataset at each new epoch
 read_ahead: 10           # number of batches to read ahead and sort
 
 # training parameters
 max_gradient_norm: 5.0   # clip gradients to this norm
 dropout_rate: 0.0        # dropout rate applied to the RNN units
-max_train_size: 0        # maximum size of the training data (0 for unlimited)
+max_train_size: 0        # maximum size of the training data (0 for unlimited): reads dataset shard by shard (careful, one epoch corresponds to one shard)
 max_dev_size: 0          # maximum size of the dev data
 steps_per_checkpoint: 1000   # number of updates between each checkpoint
 steps_per_eval: 1000     # number of updates between each BLEU eval (on dev set)

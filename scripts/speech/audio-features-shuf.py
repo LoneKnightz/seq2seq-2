@@ -7,7 +7,7 @@ import random
 parser = argparse.ArgumentParser()
 parser.add_argument('input')
 parser.add_argument('output')
-parser.add_argument('-n', type=int)
+parser.add_argument('-n', type=int, default=0)
 
 parser.add_argument('--input-txt', nargs='*')
 parser.add_argument('--output-txt', nargs='*')
@@ -21,6 +21,10 @@ with open(args.input, 'rb') as input_file:
 
     indices = list(range(line_count))
     random.shuffle(indices)
+
+    if args.n > 0:
+        indices = indices[:args.n]
+
     frames = []
 
     for _ in range(line_count):

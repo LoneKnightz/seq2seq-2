@@ -266,6 +266,7 @@ class Seq2SeqModel(object):
 
         # maximum input length of each encoder in this batch
         max_input_len = [max(len(data_[i]) for data_ in data) for i in range(len(self.encoders))]
+
         if self.max_input_len is not None:
             max_input_len = [min(len_, max_len) for len_, max_len in zip(max_input_len, self.max_input_len)]
 
